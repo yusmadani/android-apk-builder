@@ -40,13 +40,23 @@ jobs:
           CHAT_ID: ${{ github.event.client_payload.chat_id }}
           APP_NAME: ${{ github.event.client_payload.app_name }}
         run: |
+          if [ -z "$BOT_TOKEN" ]; then
+            echo "ERROR: Variabel BOT_TOKEN kosong! Periksa kembali Secrets di repository GitHub."
+            exit 1
+          fi
+
+          if [ -z "$CHAT_ID" ]; then
+            echo "ERROR: CHAT_ID kosong! Parameter dari bot Telegram tidak terbaca."
+            exit 1
+          fi
+
           APK_PATH=$(find . -name "*debug.apk" | head -n 1)
-          if [ -n "$APK_PATH" ]; then
-            echo "Mengirim APK \(APK_PATH ke Chat ID\)CHAT_ID..."
-            curl -F chat_id="$CHAT_ID" \
-                 -F document=@"$APK_PATH" \
-                 -F caption="Build berhasil untuk: ${APP_NAME:-Aplikasi Android}!" \
-                 https://api.telegram.org/bot$BOT_TOKEN/sendDocument
+          echo "Menemukan APK di: $APK_PATH"
+
+          curl -v -F chat_id="$CHAT_ID" \
+               -F document=@"$APK_PATH" \
+               -F caption="Build berhasil untuk: ${APP_NAME:-Aplikasi Android}!" \
+               "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument"
           else
             echo "File APK tidak ditemukan!"
             exit 1
