@@ -12,7 +12,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup Java JDK
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
@@ -21,38 +21,33 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      # Bagian ini membuat kerangka proyek Android WebView sederhana jika repo masih kosong
-      - name: Prepare Sample Project
+      # Unduh kerangka template Android resmi sederhana yang siap di-build
+      - name: Setup Basic Android Project
         run: |
           if [ ! -f "gradlew" ]; then
-            echo "Membuat template proyek Android pengujian..."
-            gradle init --type basic --dsl groovy
-            mkdir -p app/src/main
+            git clone --depth 1 https://github.com/android/architecture-samples.git temp-project
+            mv temp-project/* temp-project/.* . 2>/dev/null || true
+            rm -rf temp-project
           fi
+          chmod +x gradlew
 
-      - name: Build APK with Gradle
-        run: |
-          if [ -f "./gradlew" ]; then
-            chmod +x gradlew
-            ./gradlew assembleDebug || true
-          fi
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
 
-      # Simulasi / Pengiriman APK ke pengirim chat
-      - name: Send APK to Requester
+      - name: Send APK to Telegram
         env:
           BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHAT_ID: ${{ github.event.client_payload.chat_id }}
           APP_NAME: ${{ github.event.client_payload.app_name }}
         run: |
-          # Cari file APK yang berhasil di-build, jika belum ada buat file uji coba
-          APK_FILE=$(find . -name "*.apk" | head -n 1)
-          if [ -z "$APK_FILE" ]; then
-            echo "File dummy build untuk pengujian integrasi" > app-test.apk
-            APK_FILE="app-test.apk"
+          APK_PATH=$(find . -name "*debug.apk" | head -n 1)
+          if [ -n "$APK_PATH" ]; then
+            echo "Mengirim APK \(APK_PATH ke Chat ID\)CHAT_ID..."
+            curl -F chat_id="$CHAT_ID" \
+                 -F document=@"$APK_PATH" \
+                 -F caption="Build berhasil untuk: ${APP_NAME:-Aplikasi Android}!" \
+                 https://api.telegram.org/bot$BOT_TOKEN/sendDocument
+          else
+            echo "File APK tidak ditemukan!"
+            exit 1
           fi
-
-          echo "Mengirim ke Telegram Chat ID: $CHAT_ID"
-          curl -F chat_id="$CHAT_ID" \
-               -F document=@"$APK_FILE" \
-               -F caption="Build berhasil untuk: ${APP_NAME:-Aplikasi Android}!" \
-               https://api.telegram.org/bot$BOT_TOKEN/sendDocument
