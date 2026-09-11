@@ -1,4 +1,4 @@
-name: Compile and Send APK
+name: Compile Native Android APK
 
 on:
   repository_dispatch:
@@ -21,18 +21,128 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      # Unduh kerangka template Android resmi sederhana yang siap di-build
-      - name: Setup Basic Android Project
+      - name: Generate Native Android Project
+        env:
+          APP_NAME: ${{ github.event.client_payload.app_name }}
         run: |
-          if [ ! -f "gradlew" ]; then
-            git clone --depth 1 https://github.com/android/architecture-samples.git temp-project
-            mv temp-project/* temp-project/.* . 2>/dev/null || true
-            rm -rf temp-project
-          fi
-          chmod +x gradlew
+          mkdir -p app/src/main/java/com/stb/nativeapp
+          mkdir -p app/src/main/res/layout
+          mkdir -p app/src/main/res/values
 
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+          # 1. AndroidManifest.xml
+          cat << 'EOF' > app/src/main/AndroidManifest.xml
+          
+              
+                  
+                      
+                          
+                          
+                      
+                  
+              
+          
+          EOF
+
+          # 2. strings.xml
+          cat << EOF > app/src/main/res/values/strings.xml
+          
+              ${APP_NAME:-Kalkulator Diskon}
+          
+          EOF
+
+          # 3. Layout XML Native (activity_main.xml)
+          cat << 'EOF' > app/src/main/res/layout/activity_main.xml
+          
+          
+
+              
+
+              
+
+              
+
+              
+
+              
+          
+          EOF
+
+          # 4. Logika Java Native (MainActivity.java)
+          cat << 'EOF' > app/src/main/java/com/stb/nativeapp/MainActivity.java
+          package com.stb.nativeapp;
+
+          import android.app.Activity;
+          import android.os.Bundle;
+          import android.view.View;
+          import android.widget.Button;
+          import android.widget.EditText;
+          import android.widget.TextView;
+
+          public class MainActivity extends Activity {
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  setContentView(R.layout.activity_main);
+
+                  EditText etHarga = findViewById(R.id.etHarga);
+                  EditText etDiskon = findViewById(R.id.etDiskon);
+                  Button btnHitung = findViewById(R.id.btnHitung);
+                  TextView tvHasil = findViewById(R.id.tvHasil);
+
+                  btnHitung.setOnClickListener(new View.OnClickListener() {
+                      @Override
+                      public void onClick(View v) {
+                          String strHarga = etHarga.getText().toString();
+                          String strDiskon = etDiskon.getText().toString();
+
+                          if (!strHarga.isEmpty() && !strDiskon.isEmpty()) {
+                              double harga = Double.parseDouble(strHarga);
+                              double diskon = Double.parseDouble(strDiskon);
+                              double potongan = harga * (diskon / 100);
+                              double total = harga - potongan;
+
+                              tvHasil.setText(String.format("Hemat: Rp %,.2f\nTotal Bayar: Rp %,.2f", potongan, total));
+                          } else {
+                              tvHasil.setText("Harap isi harga dan persentase diskon.");
+                          }
+                      }
+                  });
+              }
+          }
+          EOF
+
+          # 5. build.gradle & settings.gradle
+          cat << 'EOF' > build.gradle
+          buildscript {
+              repositories { google(); mavenCentral() }
+              dependencies { classpath "com.android.tools.build:gradle:8.2.2" }
+          }
+          allprojects {
+              repositories { google(); mavenCentral() }
+          }
+          EOF
+
+          echo "include ':app'" > settings.gradle
+
+          cat << 'EOF' > app/build.gradle
+          apply plugin: 'com.android.application'
+          android {
+              namespace 'com.stb.nativeapp'
+              compileSdk 34
+              defaultConfig {
+                  applicationId "com.stb.nativeapp"
+                  minSdk 21
+                  targetSdk 34
+                  versionCode 1
+                  versionName "1.0"
+              }
+          }
+          EOF
+
+      - name: Build Native APK
+        run: |
+          gradle wrapper --gradle-version 8.5
+          ./gradlew assembleDebug --no-daemon
 
       - name: Send APK to Telegram
         env:
@@ -40,24 +150,8 @@ jobs:
           CHAT_ID: ${{ github.event.client_payload.chat_id }}
           APP_NAME: ${{ github.event.client_payload.app_name }}
         run: |
-          if [ -z "$BOT_TOKEN" ]; then
-            echo "ERROR: Variabel BOT_TOKEN kosong! Periksa kembali Secrets di repository GitHub."
-            exit 1
-          fi
-
-          if [ -z "$CHAT_ID" ]; then
-            echo "ERROR: CHAT_ID kosong! Parameter dari bot Telegram tidak terbaca."
-            exit 1
-          fi
-
-          APK_PATH=$(find . -name "*debug.apk" | head -n 1)
-          echo "Menemukan APK di: $APK_PATH"
-
-          curl -v -F chat_id="$CHAT_ID" \
+          APK_PATH=$(find app/build/outputs/apk -name "*.apk" | head -n 1)
+          curl -F chat_id="$CHAT_ID" \
                -F document=@"$APK_PATH" \
-               -F caption="Build berhasil untuk: ${APP_NAME:-Aplikasi Android}!" \
+               -F caption="APK Native berhasil dibuat untuk: ${APP_NAME:-Kalkulator Diskon}!" \
                "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument"
-          else
-            echo "File APK tidak ditemukan!"
-            exit 1
-          fi
