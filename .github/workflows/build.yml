@@ -21,30 +21,43 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Inject Dynamic App Code
+      - name: Inject Dynamic App Code via Python
         env:
-          APP_NAME_RAW: ${{ github.event.client_payload.app_name }}
-          JAVA_B64: ${{ github.event.client_payload.java_code_b64 }}
-          XML_B64: ${{ github.event.client_payload.xml_code_b64 }}
+          EVENT_JSON: ${{ toJson(github.event.client_payload) }}
         run: |
-          mkdir -p app/src/main/java/com/stb/dynamicapp
-          mkdir -p app/src/main/res/layout
-          mkdir -p app/src/main/res/values
+          python3 - << 'PYEOF'
+          import os, json, base64, re
 
-          # 1. Dekode Java Code
-          echo "$JAVA_B64" | base64 -d > app/src/main/java/com/stb/dynamicapp/MainActivity.java
+          data = json.loads(os.environ.get("EVENT_JSON", "{}"))
 
-          # 2. Dekode Layout XML
-          echo "$XML_B64" | base64 -d > app/src/main/res/layout/activity_main.xml
+          # Pastikan direktori tujuan ada
+          os.makedirs("app/src/main/java/com/stb/dynamicapp", exist_ok=True)
+          os.makedirs("app/src/main/res/layout", exist_ok=True)
+          os.makedirs("app/src/main/res/values", exist_ok=True)
 
-          # 3. Filter nama aplikasi agar hanya alfanumerik dan spasi (mencegah syntax error shell/XML)
-          CLEAN_NAME=\((printf "%s" "\)APP_NAME_RAW" | tr -cd '[:alnum:] ')
-          if [ -z "$CLEAN_NAME" ]; then
-            CLEAN_NAME="DynamicApp"
-          fi
+          # 1. Tulis MainActivity.java
+          java_b64 = data.get("java_code_b64", "")
+          with open("app/src/main/java/com/stb/dynamicapp/MainActivity.java", "wb") as f:
+              f.write(base64.b64decode(java_b64))
 
-          # 4. Generate strings.xml yang bersih tanpa prolog error
-          printf '\n\n    %s\n\n' "$CLEAN_NAME" > app/src/main/res/values/strings.xml
+          # 2. Tulis activity_main.xml
+          xml_b64 = data.get("xml_code_b64", "")
+          with open("app/src/main/res/layout/activity_main.xml", "wb") as f:
+              f.write(base64.b64decode(xml_b64))
+
+          # 3. Tulis strings.xml bersih
+          raw_name = data.get("app_name", "DynamicApp")
+          clean_name = re.sub(r'[^a-zA-Z0-9 _-]', '', raw_name).strip() or "DynamicApp"
+          strings_content = f'''
+          
+              {clean_name}
+          
+          '''
+          with open("app/src/main/res/values/strings.xml", "w", encoding="utf-8") as f:
+              f.write(strings_content.strip() + "\n")
+
+          print("Semua file proyek berhasil diinjeksi tanpa error shell!")
+          PYEOF
 
       - name: Grant Execute Permission for Gradle
         run: chmod +x gradlew
