@@ -97,7 +97,7 @@ jobs:
           }
           EOF
 
-          # 5. AndroidManifest.xml standar
+          # 5. AndroidManifest.xml (Wajib terisi lengkap)
           cat << 'EOF' > app/src/main/AndroidManifest.xml
           
           
@@ -125,7 +125,7 @@ jobs:
           raw = os.environ.get("PAYLOAD_DATA", "{}")
           data = json.loads(raw)
 
-          # 1. Tulis Java
+          # 1. Tulis Java Code
           j_b64 = data.get("java_code_b64", "")
           j_code = base64.b64decode(j_b64).decode("utf-8", "ignore")
           with open("app/src/main/java/com/stb/dynamicapp/MainActivity.java", "w", encoding="utf-8") as f:
