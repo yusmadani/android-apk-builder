@@ -25,14 +25,15 @@ jobs:
         run: |
           mkdir -p app/src/main/java/com/stb/dynamicapp
           mkdir -p app/src/main/res/layout
-          mkdir -p app/src/main/res/values
 
-          # 1. gradle.properties (Wajib untuk AndroidX)
+          # 1. gradle.properties (Root & App)
           cat << 'EOF' > gradle.properties
           android.useAndroidX=true
+          android.enableJetifier=true
           android.nonTransitiveRClass=true
           org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
           EOF
+          cp gradle.properties app/gradle.properties
 
           # 2. settings.gradle
           cat << 'EOF' > settings.gradle
@@ -96,57 +97,59 @@ jobs:
           }
           EOF
 
-          # 5. AndroidManifest.xml
-          cat << 'EOF' > app/src/main/AndroidManifest.xml
-          
-          
-              
-                  
-                      
-                          
-                          
-                      
-                  
-              
-          
-          EOF
-
       - name: Inject Dynamic App Code via Python
         env:
           PAYLOAD_DATA: ${{ toJson(github.event.client_payload) }}
         run: |
           python3 - << 'PYEOF'
-          import os, json, base64, re
+          import os, json, base64, re, shutil
 
           data = json.loads(os.environ.get("PAYLOAD_DATA", "{}"))
 
-          # Tulis Java
+          # Bersihkan direktori values untuk mencegah error XML prolog
+          if os.path.exists("app/src/main/res/values"):
+              shutil.rmtree("app/src/main/res/values")
+
+          # 1. Tulis Java Code
           with open("app/src/main/java/com/stb/dynamicapp/MainActivity.java", "wb") as f:
               f.write(base64.b64decode(data.get("java_code_b64", "")))
 
-          # Tulis Layout XML
-          with open("app/src/main/res/layout/activity_main.xml", "wb") as f:
-              f.write(base64.b64decode(data.get("xml_code_b64", "")))
+          # 2. Tulis Layout XML (Sanitasi byte & BOM UTF-8)
+          raw_bytes = base64.b64decode(data.get("xml_code_b64", ""))
+          raw_xml = raw_bytes.decode("utf-8", errors="ignore").strip()
+          if raw_xml.startswith("\ufeff"):
+              raw_xml = raw_xml[1:]
 
-          # Tulis Strings XML
+          with open("app/src/main/res/layout/activity_main.xml", "w", encoding="utf-8") as f:
+              f.write(raw_xml)
+
+          # 3. Buat AndroidManifest dengan label string literal
           raw_name = data.get("app_name", "DynamicApp")
           clean_name = re.sub(r'[^a-zA-Z0-9 _-]', '', raw_name).strip() or "DynamicApp"
-          xml_content = f'''
+
+          manifest_content = f'''
           
-              {clean_name}
+              
+                  
+                      
+                          
+                          
+                      
+                  
+              
           
           '''
-          with open("app/src/main/res/values/strings.xml", "w", encoding="utf-8") as f:
-              f.write(xml_content.strip() + "\n")
+          with open("app/src/main/AndroidManifest.xml", "w", encoding="utf-8") as f:
+              f.write(manifest_content.strip() + "\n")
 
-          print("Injeksi source code selesai!")
+          print("Injeksi source code selesai tanpa dependensi strings.xml!")
           PYEOF
 
       - name: Setup Gradle Wrapper and Build APK
         run: |
           gradle wrapper --gradle-version 8.5
           chmod +x gradlew
-          ./gradlew assembleDebug --stacktrace
+          ./gradlew assembleDebug -Pandroid.useAndroidX=true -Pandroid.enableJetifier=true --stacktrace
 
       - name: Send APK to Telegram
         if: success()
@@ -156,7 +159,7 @@ jobs:
           APP_TITLE: ${{ github.event.client_payload.app_name }}
         run: |
           APK_PATH=$(find app/build/outputs/apk/debug/ -name "*.apk" | head -n 1)
-          if [ -f "$APK_PATH" ]; then
+          if [ -n "\(BOT_TOKEN" ] && [ -f "\)APK_PATH" ]; then
             curl -F chat_id="$CHAT_ID" \
                  -F document=@"$APK_PATH" \
                  -F caption="✅ APK Berhasil Dikompilasi: $APP_TITLE" \
@@ -169,6 +172,8 @@ jobs:
           CHAT_ID: ${{ github.event.client_payload.chat_id }}
           BOT_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
         run: |
-          curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
-               -d chat_id="$CHAT_ID" \
-               -d text="❌ Gagal mengompilasi APK. Cek detail error di log GitHub Actions."
+          if [ -n "$BOT_TOKEN" ]; then
+            curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+                 -d chat_id="$CHAT_ID" \
+                 -d text="❌ Gagal mengompilasi APK. Cek detail error di log GitHub Actions."
+          fi
