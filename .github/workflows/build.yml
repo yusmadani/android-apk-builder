@@ -30,22 +30,18 @@ jobs:
 
           data = json.loads(os.environ.get("EVENT_JSON", "{}"))
 
-          # Pastikan direktori tujuan ada
           os.makedirs("app/src/main/java/com/stb/dynamicapp", exist_ok=True)
           os.makedirs("app/src/main/res/layout", exist_ok=True)
           os.makedirs("app/src/main/res/values", exist_ok=True)
 
-          # 1. Tulis MainActivity.java
           java_b64 = data.get("java_code_b64", "")
           with open("app/src/main/java/com/stb/dynamicapp/MainActivity.java", "wb") as f:
               f.write(base64.b64decode(java_b64))
 
-          # 2. Tulis activity_main.xml
           xml_b64 = data.get("xml_code_b64", "")
           with open("app/src/main/res/layout/activity_main.xml", "wb") as f:
               f.write(base64.b64decode(xml_b64))
 
-          # 3. Tulis strings.xml bersih
           raw_name = data.get("app_name", "DynamicApp")
           clean_name = re.sub(r'[^a-zA-Z0-9 _-]', '', raw_name).strip() or "DynamicApp"
           strings_content = f'''
@@ -56,14 +52,13 @@ jobs:
           with open("app/src/main/res/values/strings.xml", "w", encoding="utf-8") as f:
               f.write(strings_content.strip() + "\n")
 
-          print("Semua file proyek berhasil diinjeksi tanpa error shell!")
+          print("Proyek Android berhasil di-generate!")
           PYEOF
 
-     - name: Setup Gradle Wrapper and Build APK
+      - name: Setup Gradle Wrapper and Build APK
         run: |
-          # Buat wrapper jika belum ada di repository
           if [ ! -f "gradlew" ]; then
-            echo "gradlew tidak ditemukan, membuat wrapper otomatis..."
+            echo "gradlew belum ada, membuat gradle wrapper..."
             gradle wrapper --gradle-version 8.5
           fi
           chmod +x gradlew
@@ -93,4 +88,4 @@ jobs:
         run: |
           curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
                -d chat_id="$CHAT_ID" \
-               -d text="❌ Gagal mengompilasi APK. Cek log GitHub Actions untuk melihat detail error."
+               -d text="❌ Gagal mengompilasi APK. Cek detail error di tab Actions GitHub."
