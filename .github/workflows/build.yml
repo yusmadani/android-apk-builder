@@ -157,12 +157,34 @@ jobs:
           APP_TITLE: ${{ github.event.client_payload.app_name }}
         run: |
           APK_PATH=$(find app/build/outputs/apk/debug/ -name "*.apk" | head -n 1)
-          if [ -n "\(BOT_TOKEN" ] && [ -f "\)APK_PATH" ]; then
-            curl -F chat_id="$CHAT_ID" \
-                 -F document=@"$APK_PATH" \
-                 -F caption="✅ APK Berhasil Dikompilasi: $APP_TITLE" \
-                 "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument"
+          
+          echo "=== DEBUG PENGIRIMAN TELEGRAM ==="
+          echo "Target Chat ID: $CHAT_ID"
+          echo "Path APK: $APK_PATH"
+          
+          if [ -z "$BOT_TOKEN" ]; then
+            echo "❌ ERROR: Secret TELEGRAM_TOKEN di GitHub kosong atau belum disetel!"
+            exit 1
           fi
+          
+          if [ ! -f "$APK_PATH" ]; then
+            echo "❌ ERROR: File APK tidak ditemukan di direktori output build!"
+            exit 1
+          fi
+          
+          echo "Mengirim APK ke Telegram..."
+          RESPONSE=\((curl -s -X POST "https://api.telegram.org/bot\){BOT_TOKEN}/sendDocument" \
+               -F chat_id="$CHAT_ID" \
+               -F document=@"$APK_PATH" \
+               -F caption="✅ APK Berhasil Dikompilasi: $APP_TITLE")
+          
+          echo "Respon Telegram API: $RESPONSE"
+          
+          if [[ "$RESPONSE" != *'"ok":true'* ]]; then
+            echo "❌ Gagal mengirim file ke Telegram!"
+            exit 1
+          fi
+          echo "✅ APK berhasil terkirim ke Telegram!"
 
       - name: Notify Failure to Telegram
         if: failure()
