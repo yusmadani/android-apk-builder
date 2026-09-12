@@ -52,13 +52,13 @@ jobs:
           with open("app/src/main/res/values/strings.xml", "w", encoding="utf-8") as f:
               f.write(strings_content.strip() + "\n")
 
-          print("Proyek Android berhasil di-generate!")
+          print("File Android berhasil diinjeksi!")
           PYEOF
 
       - name: Setup Gradle Wrapper and Build APK
         run: |
           if [ ! -f "gradlew" ]; then
-            echo "gradlew belum ada, membuat gradle wrapper..."
+            echo "Membuat gradle wrapper..."
             gradle wrapper --gradle-version 8.5
           fi
           chmod +x gradlew
@@ -88,4 +88,4 @@ jobs:
         run: |
           curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
                -d chat_id="$CHAT_ID" \
-               -d text="❌ Gagal mengompilasi APK. Cek detail error di tab Actions GitHub."
+               -d text="❌ Gagal mengompilasi APK. Cek log GitHub Actions."
