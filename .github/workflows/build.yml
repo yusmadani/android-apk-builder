@@ -97,7 +97,7 @@ jobs:
           }
           EOF
 
-          # 5. AndroidManifest.xml (Base64 aman)
+          # 5. AndroidManifest.xml
           echo "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPG1hbmlmZXN0IHhtbG5zOmFuZHJvaWQ9Imh0dHA6Ly9zY2hlbWFzLmFuZHJvaWQuY29tL2Fway9yZXMvYW5kcm9pZCI+CiAgICA8YXBwbGljYXRpb24KICAgICAgICBhbmRyb2lkOmFsbG93QmFja3VwPSJ0cnVlIgogICAgICAgIGFuZHJvaWQ6aWNvbj0iQGFuZHJvaWQ6ZHJhd2FibGUvc3ltX2RlZl9hcHBfaWNvbiIKICAgICAgICBhbmRyb2lkOmxhYmVsPSJEeW5hbWljQXBwIgogICAgICAgIGFuZHJvaWQ6c3VwcG9ydHNSdGw9InRydWUiCiAgICAgICAgYW5kcm9pZDp0aGVtZT0iQHN0eWxlL1RoZW1lLk1hdGVyaWFsQ29tcG9uZW50cy5EYXlOaWdodC5EYXJrQWN0aW9uQmFyIj4KICAgICAgICA8YWN0aXZpdHkKICAgICAgICAgICAgYW5kcm9pZDpuYW1lPSIuTWFpbkFjdGl2aXR5IgogICAgICAgICAgICBhbmRyb2lkOmV4cG9ydGVkPSJ0cnVlIj4KICAgICAgICAgICAgPGludGVudC1maWx0ZXI+CiAgICAgICAgICAgICAgICA8YWN0aW9uIGFuZHJvaWQ6bmFtZT0iYW5kcm9pZC5pbnRlbnQuYWN0aW9uLk1BSU4iIC8+CiAgICAgICAgICAgICAgICA8Y2F0ZWdvcnkgYW5kcm9pZDpuYW1lPSJhbmRyb2lkLmludGVudC5jYXRlZ29yeS5MQVVOQ0hFUiIgLz4KICAgICAgICAgICAgPC9pbnRlbnQtZmlsdGVyPgogICAgICAgIDwvYWN0aXZpdHk+CiAgICA8L2FwcGxpY2F0aW9uPgo8L21hbmlmZXN0Pgo=" | base64 -d > app/src/main/AndroidManifest.xml
 
       - name: Inject Dynamic App Code via Python
@@ -113,16 +113,14 @@ jobs:
           raw = os.environ.get("PAYLOAD_DATA", "{}")
           data = json.loads(raw)
 
-          # 1. Tulis Java
           j_b64 = data.get("java_code_b64", "")
           j_code = base64.b64decode(j_b64).decode("utf-8", "ignore")
           with open("app/src/main/java/com/stb/dynamicapp/MainActivity.java", "w", encoding="utf-8") as f:
               f.write(j_code)
 
-          # 2. Tulis Layout XML
           x_b64 = data.get("xml_code_b64", "")
           x_code = base64.b64decode(x_b64).decode("utf-8", "ignore").strip()
-          if x_code.startswith("\ufeff"):
+          if x_code.startswith("$ufeff"):
               x_code = x_code[1:]
 
           valid_tags = ["Layout", "View"]
@@ -159,7 +157,7 @@ jobs:
           title = os.environ.get("APP_TITLE", "Aplikasi").strip()
 
           if not token:
-              print("❌ ERROR: Secret TELEGRAM_TOKEN belum disetel di GitHub Settings!")
+              print("❌ ERROR: Secret TELEGRAM_TOKEN belum disetel di Settings > Secrets GitHub!")
               exit(1)
 
           apk_files = glob.glob("app/build/outputs/apk/debug/*.apk")
@@ -197,16 +195,6 @@ jobs:
           CHAT_ID: ${{ github.event.client_payload.chat_id }}
           BOT_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
         run: |
-          python3 - << 'EOF'
-          import os, requests
-
-          token = os.environ.get("BOT_TOKEN", "").strip()
-          chat_id = os.environ.get("CHAT_ID", "").strip()
-
-          if token and chat_id:
-              url = f"https://api.telegram.org/bot{token}/sendMessage"
-              requests.post(url, data={
-                  "chat_id": chat_id,
-                  "text": "❌ Gagal mengompilasi APK. Silakan cek detail error di tab GitHub Actions."
-              })
-          EOF
+          if [ -n "$BOT_TOKEN" ]; then
+            curl -s -X POST "https://api.telegram.org/bot$({BOT_TOKEN}/sendMessage" -d "chat_id=$){CHAT_ID}" -d "text=❌ Gagal mengompilasi APK. Cek log GitHub Actions."
+          fi
