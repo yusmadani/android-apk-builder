@@ -12,7 +12,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      - name: Setup JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
@@ -21,44 +21,40 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Inject Dynamic App Code via Python
+      - name: Inject Dynamic Files
         env:
-          EVENT_JSON: ${{ toJson(github.event.client_payload) }}
+          PAYLOAD_DATA: ${{ toJson(github.event.client_payload) }}
         run: |
           python3 - << 'PYEOF'
           import os, json, base64, re
 
-          data = json.loads(os.environ.get("EVENT_JSON", "{}"))
+          data = json.loads(os.environ.get("PAYLOAD_DATA", "{}"))
 
           os.makedirs("app/src/main/java/com/stb/dynamicapp", exist_ok=True)
           os.makedirs("app/src/main/res/layout", exist_ok=True)
           os.makedirs("app/src/main/res/values", exist_ok=True)
 
-          java_b64 = data.get("java_code_b64", "")
+          # Tulis Java
           with open("app/src/main/java/com/stb/dynamicapp/MainActivity.java", "wb") as f:
-              f.write(base64.b64decode(java_b64))
+              f.write(base64.b64decode(data.get("java_code_b64", "")))
 
-          xml_b64 = data.get("xml_code_b64", "")
+          # Tulis Layout XML
           with open("app/src/main/res/layout/activity_main.xml", "wb") as f:
-              f.write(base64.b64decode(xml_b64))
+              f.write(base64.b64decode(data.get("xml_code_b64", "")))
 
+          # Tulis Strings XML
           raw_name = data.get("app_name", "DynamicApp")
           clean_name = re.sub(r'[^a-zA-Z0-9 _-]', '', raw_name).strip() or "DynamicApp"
-          strings_content = f'''
-          
-              {clean_name}
-          
-          '''
+          xml_content = f'\n\n    {clean_name}\n\n'
           with open("app/src/main/res/values/strings.xml", "w", encoding="utf-8") as f:
-              f.write(strings_content.strip() + "\n")
+              f.write(xml_content)
 
-          print("File Android berhasil diinjeksi!")
+          print("Injeksi source code selesai.")
           PYEOF
 
-      - name: Setup Gradle Wrapper and Build APK
+      - name: Run Build APK
         run: |
           if [ ! -f "gradlew" ]; then
-            echo "Membuat gradle wrapper..."
             gradle wrapper --gradle-version 8.5
           fi
           chmod +x gradlew
@@ -71,16 +67,15 @@ jobs:
           BOT_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           APP_TITLE: ${{ github.event.client_payload.app_name }}
         run: |
-          APK_PATH=$(find app/build/outputs/apk/debug/ -name "*.apk" | head -n 1)
-
-          if [ -f "$APK_PATH" ]; then
+          APK=$(find app/build/outputs/apk/debug/ -name "*.apk" | head -n 1)
+          if [ -f "$APK" ]; then
             curl -F chat_id="$CHAT_ID" \
-                 -F document=@"$APK_PATH" \
-                 -F caption="✅ APK Berhasil Dikompilasi: $APP_TITLE" \
+                 -F document=@"$APK" \
+                 -F caption="✅ APK Selesai Dibuat: $APP_TITLE" \
                  "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument"
           fi
 
-      - name: Notify Failure to Telegram
+      - name: Alert Build Failure
         if: failure()
         env:
           CHAT_ID: ${{ github.event.client_payload.chat_id }}
@@ -88,4 +83,4 @@ jobs:
         run: |
           curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
                -d chat_id="$CHAT_ID" \
-               -d text="❌ Gagal mengompilasi APK. Cek log GitHub Actions."
+               -d text="❌ Build Gradle gagal. Silakan periksa log Actions GitHub."
