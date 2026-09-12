@@ -142,30 +142,55 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug -Pandroid.useAndroidX=true -Pandroid.enableJetifier=true --stacktrace
 
-      - name: Send APK to Telegram
+      - name: Send APK to Telegram via Python
         if: success()
         env:
           CHAT_ID: ${{ github.event.client_payload.chat_id }}
           BOT_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           APP_TITLE: ${{ github.event.client_payload.app_name }}
         run: |
-          APK_PATH=$(find app/build/outputs/apk/debug/ -name "*.apk" | head -n 1)
-          echo "Target Chat ID: $CHAT_ID"
-          echo "File APK: $APK_PATH"
+          python3 - << 'PYEOF'
+          import os, sys, glob, requests
 
-          if [ -z "$BOT_TOKEN" ]; then
-            echo "ERROR: Secret TELEGRAM_TOKEN belum disetel di GitHub!"
-            exit 1
-          fi
+          token = os.environ.get("BOT_TOKEN", "").strip()
+          chat_id = os.environ.get("CHAT_ID", "").strip()
+          title = os.environ.get("APP_TITLE", "Aplikasi").strip()
 
-          # Mengirim via curl dalam 1 baris aman tanpa backslash
-          curl -s -S -X POST "https://api.telegram.org/bot\({BOT_TOKEN}/sendDocument" -F "chat_id=\){CHAT_ID}" -F "document=@\({APK_PATH}" -F "caption=✅ APK Berhasil Dikompilasi:\){APP_TITLE}" -o tg_result.json
+          if not token:
+              print("ERROR: Secret TELEGRAM_TOKEN belum disetel di GitHub!")
+              sys.exit(1)
 
-          echo "Respon Telegram:"
-          cat tg_result.json
-          echo ""
+          # Cari file APK secara rekursif dengan absolute path
+          apk_files = glob.glob(os.path.abspath("app/build/outputs/apk/debug/*.apk"))
+          if not apk_files:
+              print("ERROR: File APK tidak ditemukan di app/build/outputs/apk/debug/")
+              sys.exit(1)
 
-          grep -q '"ok":true' tg_result.json || exit 1
+          apk_path = apk_files[0]
+          file_size = os.path.getsize(apk_path)
+          print(f"Mengirim file APK: {apk_path} ({file_size} bytes)")
+          print(f"Tujuan Chat ID: {chat_id}")
+
+          url = f"https://api.telegram.org/bot{token}/sendDocument"
+          data = {
+              "chat_id": chat_id,
+              "caption": f"✅ APK Berhasil Dikompilasi: {title}"
+          }
+
+          with open(apk_path, "rb") as doc:
+              files = {"document": (os.path.basename(apk_path), doc, "application/vnd.android.package-archive")}
+              resp = requests.post(url, data=data, files=files, timeout=120)
+
+          print("Respon HTTP:", resp.status_code)
+          print("Isi Respon:", resp.text)
+
+          res_json = resp.json()
+          if not res_json.get("ok"):
+              print("Gagal mengirim file ke Telegram!")
+              sys.exit(1)
+
+          print("✅ APK berhasil dikirim langsung ke Telegram!")
+          PYEOF
 
       - name: Notify Failure to Telegram
         if: failure()
@@ -174,5 +199,5 @@ jobs:
           BOT_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
         run: |
           if [ -n "$BOT_TOKEN" ]; then
-            curl -s -X POST "https://api.telegram.org/bot\({BOT_TOKEN}/sendMessage" -d "chat_id=\){CHAT_ID}" -d "text=❌ Gagal mengompilasi APK. Cek log GitHub Actions."
+            curl -s -X POST "https://api.telegram.org/bot\({BOT_TOKEN}/sendMessage" -d "chat_id=\){CHAT_ID}" -d "text=❌ Gagal mengompilasi APK. Cek detail error di log GitHub Actions."
           fi
