@@ -99,20 +99,8 @@ jobs:
           }
           EOF
 
-          # 5. AndroidManifest.xml
-          cat << 'EOF' > app/src/main/AndroidManifest.xml
-          
-          
-              
-                  
-                      
-                          
-                          
-                      
-                  
-              
-          
-          EOF
+          # 5. AndroidManifest.xml (Ditulis langsung via Base64 bersih tanpa masalah spasi/indentasi)
+          echo "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPG1hbmlmZXN0IHhtbG5zOmFuZHJvaWQ9Imh0dHA6Ly9zY2hlbWFzLmFuZHJvaWQuY29tL2Fway9yZXMvYW5kcm9pZCI+CiAgICA8YXBwbGljYXRpb24KICAgICAgICBhbmRyb2lkOmFsbG93QmFja3VwPSJ0cnVlIgogICAgICAgIGFuZHJvaWQ6aWNvbj0iQGRyYXdhYmxlL2ljX2xhdW5jaGVyIgogICAgICAgIGFuZHJvaWQ6cm91bmRJY29uPSJAZHJhd2FibGUvaWNfbGF1bmNoZXIiCiAgICAgICAgYW5kcm9pZDpsYWJlbD0iRHluYW1pY0FwcCIKICAgICAgICBhbmRyb2lkOnN1cHBvcnRzUnRsPSJ0cnVlIgogICAgICAgIGFuZHJvaWQ6dGhlbWU9IkBzdHlsZS9UaGVtZS5NYXRlcmlhbENvbXBvbmVudHMuRGF5TmlnaHQuRGFya0FjdGlvbkJhciI+CiAgICAgICAgPGFjdGl2aXR5CiAgICAgICAgICAgIGFuZHJvaWQ6bmFtZT0iLk1haW5BY3Rpdml0eSIKICAgICAgICAgICAgYW5kcm9pZDpleHBvcnRlZD0idHJ1ZSI+CiAgICAgICAgICAgIDxpbnRlbnQtZmlsdGVyPgogICAgICAgICAgICAgICAgPGFjdGlvbiBhbmRyb2lkOm5hbWU9ImFuZHJvaWQuaW50ZW50LmFjdGlvbi5NQUlOIiAvPgogICAgICAgICAgICAgICAgPGNhdGVnb3J5IGFuZHJvaWQ6bmFtZT0iYW5kcm9pZC5pbnRlbnQuY2F0ZWdvcnkuTEFVTkNIRVIiIC8+CiAgICAgICAgICAgIDwvaW50ZW50LWZpbHRlcj4KICAgICAgICA8L2FjdGl2aXR5PgogICAgPC9hcHBsaWNhdGlvbj4KPC9tYW5pZmVzdD4=" | base64 -d > app/src/main/AndroidManifest.xml
 
       - name: Inject Dynamic App Code, Themed Icon & Sanitize via Python
         env:
@@ -120,7 +108,7 @@ jobs:
         run: |
           pip install pillow --quiet
           python3 - << 'PYEOF'
-          import os, json, base64, shutil, re, math
+          import os, json, base64, shutil, re
           import xml.etree.ElementTree as ET
           from PIL import Image, ImageDraw
 
@@ -168,7 +156,7 @@ jobs:
           if x_code.startswith("\ufeff"):
               x_code = x_code[1:]
 
-          # Escape simbol & mentah menjadi &
+          # Escape karakter & mentah menjadi &
           x_code = re.sub(r'&(?!(amp|lt|gt|quot|apos);)', '&', x_code)
 
           fallback_xml = """
@@ -191,11 +179,11 @@ jobs:
               f.write(x_code)
 
           # ==========================================
-          # 3. GENERATE CUSTOM THEMED ICON (MATERIAL HD)
+          # 3. BUAT IKON LAUNCHER TEMATIK HD
           # ==========================================
           title_lower = title.lower()
           if any(k in title_lower for k in ["gym", "workout", "fitness", "dumbel", "dumbbell", "katrol", "pulley", "otot"]):
-              bg_color, inner_bg, icon_type = (216, 67, 21), (230, 81, 0), "gym" # Deep Orange/Gym
+              bg_color, inner_bg, icon_type = (216, 67, 21), (230, 81, 0), "gym"
           elif any(k in title_lower for k in ["kalkulator", "hitung", "math", "kasir"]):
               bg_color, inner_bg, icon_type = (25, 118, 210), (33, 150, 243), "calc"
           elif any(k in title_lower for k in ["game", "ketuk", "tap", "skor", "play", "main"]):
@@ -216,12 +204,9 @@ jobs:
           white = (255, 255, 255, 255)
 
           if icon_type == "gym":
-              # Dumbbell Icon
-              draw.rounded_rectangle([190, 244, 322, 268], radius=8, fill=white) # Bar tengah
-              # Beban Kiri
+              draw.rounded_rectangle([190, 244, 322, 268], radius=8, fill=white)
               draw.rounded_rectangle([140, 180, 190, 332], radius=14, fill=white)
               draw.rounded_rectangle([110, 205, 140, 307], radius=10, fill=white)
-              # Beban Kanan
               draw.rounded_rectangle([322, 180, 372, 332], radius=14, fill=white)
               draw.rounded_rectangle([372, 205, 402, 307], radius=10, fill=white)
           elif icon_type == "calc":
@@ -264,7 +249,7 @@ jobs:
           else:
               pts = []
               for i in range(10):
-                  ang = i * math.pi / 5 - math.pi / 2
+                  ang = i * 3.14159 / 5 - 3.14159 / 2
                   r = 145 if i % 2 == 0 else 70
                   pts.append((256 + r * math.cos(ang), 256 + r * math.sin(ang)))
               draw.polygon(pts, fill=white)
@@ -275,9 +260,12 @@ jobs:
           icon_final.save("app/src/main/res/mipmap/ic_launcher.png", "PNG")
 
           # ==========================================
-          # 4. SINKRONISASI MANIFEST (LABEL NAMA APP)
+          # 4. SINKRONISASI MANIFEST (LABEL AMAN DARI SIMBOL LIAR)
           # ==========================================
-          clean_title = re.sub(r'[^a-zA-Z0-9 _-]', '', title).strip() or "DynamicApp"
+          # Hanya izinkan alfanumerik dan spasi, maksimal 25 karakter
+          clean_title = re.sub(r'[^a-zA-Z0-9 ]', '', title).strip()
+          clean_title = clean_title[:25] if clean_title else "HomeGymTracker"
+
           manifest_file = "app/src/main/AndroidManifest.xml"
           if os.path.exists(manifest_file):
               with open(manifest_file, "r", encoding="utf-8") as mf:
@@ -286,7 +274,7 @@ jobs:
               with open(manifest_file, "w", encoding="utf-8") as mf:
                   mf.write(m_text)
 
-          print("✅ Persiapan kode, sanitasi, dan ikon tematik selesai.")
+          print(f"✅ Injeksi sukses dengan label aplikasi: {clean_title}")
           PYEOF
 
       - name: Setup Gradle Wrapper and Build APK
@@ -330,7 +318,7 @@ jobs:
           url = f"https://api.telegram.org/bot{token}/sendDocument"
           payload = {
               "chat_id": chat_id,
-              "caption": f"✅ *{title}* berhasil dikompilasi!\n📁 File: `{new_file_name}`\n🎨 Ikon & layout telah disesuaikan.",
+              "caption": f"✅ *{title}* berhasil dikompilasi!\n📁 File: `{new_file_name}`\n🎨 Ikon & tema telah disesuaikan.",
               "parse_mode": "Markdown"
           }
 
