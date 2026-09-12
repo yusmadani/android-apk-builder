@@ -22,25 +22,29 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Inject Dynamic App Code
+        env:
+          APP_NAME_RAW: ${{ github.event.client_payload.app_name }}
+          JAVA_B64: ${{ github.event.client_payload.java_code_b64 }}
+          XML_B64: ${{ github.event.client_payload.xml_code_b64 }}
         run: |
           mkdir -p app/src/main/java/com/stb/dynamicapp
           mkdir -p app/src/main/res/layout
           mkdir -p app/src/main/res/values
 
-          # Dekode file kode Java
-          echo "${{ github.event.client_payload.java_code_b64 }}" | base64 -d > app/src/main/java/com/stb/dynamicapp/MainActivity.java
+          # 1. Dekode Java Code
+          echo "$JAVA_B64" | base64 -d > app/src/main/java/com/stb/dynamicapp/MainActivity.java
 
-          # Dekode file layout XML
-          echo "${{ github.event.client_payload.xml_code_b64 }}" | base64 -d > app/src/main/res/layout/activity_main.xml
+          # 2. Dekode Layout XML
+          echo "$XML_B64" | base64 -d > app/src/main/res/layout/activity_main.xml
 
-          # Generate strings.xml yang valid dan bersih dari prolog error
-          CLEAN_APP_NAME=\((echo "\){{ github.event.client_payload.app_name }}" | tr -cd 'a-zA-Z0-9 _-')
-          cat < app/src/main/res/values/strings.xml
-          
-          
-              $CLEAN_APP_NAME
-          
-          EOF
+          # 3. Filter nama aplikasi agar hanya alfanumerik dan spasi (mencegah syntax error shell/XML)
+          CLEAN_NAME=\((printf "%s" "\)APP_NAME_RAW" | tr -cd '[:alnum:] ')
+          if [ -z "$CLEAN_NAME" ]; then
+            CLEAN_NAME="DynamicApp"
+          fi
+
+          # 4. Generate strings.xml yang bersih tanpa prolog error
+          printf '\n\n    %s\n\n' "$CLEAN_NAME" > app/src/main/res/values/strings.xml
 
       - name: Grant Execute Permission for Gradle
         run: chmod +x gradlew
@@ -50,23 +54,26 @@ jobs:
 
       - name: Send APK to Telegram
         if: success()
+        env:
+          CHAT_ID: ${{ github.event.client_payload.chat_id }}
+          BOT_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          APP_TITLE: ${{ github.event.client_payload.app_name }}
         run: |
-          CHAT_ID="${{ github.event.client_payload.chat_id }}"
-          BOT_TOKEN="${{ secrets.TELEGRAM_TOKEN }}"
           APK_PATH=$(find app/build/outputs/apk/debug/ -name "*.apk" | head -n 1)
 
           if [ -f "$APK_PATH" ]; then
             curl -F chat_id="$CHAT_ID" \
                  -F document=@"$APK_PATH" \
-                 -F caption="✅ APK Berhasil Dikompilasi: ${{ github.event.client_payload.app_name }}" \
-                 https://api.telegram.org/bot${BOT_TOKEN}/sendDocument
+                 -F caption="✅ APK Berhasil Dikompilasi: $APP_TITLE" \
+                 "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument"
           fi
 
       - name: Notify Failure to Telegram
         if: failure()
+        env:
+          CHAT_ID: ${{ github.event.client_payload.chat_id }}
+          BOT_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
         run: |
-          CHAT_ID="${{ github.event.client_payload.chat_id }}"
-          BOT_TOKEN="${{ secrets.TELEGRAM_TOKEN }}"
-          curl -s -X POST https://api.telegram.org/bot${BOT_TOKEN}/sendMessage \
+          curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
                -d chat_id="$CHAT_ID" \
-               -d text="❌ Gagal mengompilasi APK. Terjadi error saat Gradle build."
+               -d text="❌ Gagal mengompilasi APK. Cek log GitHub Actions untuk melihat detail error."
