@@ -25,6 +25,7 @@ jobs:
         run: |
           mkdir -p app/src/main/java/com/stb/dynamicapp
           mkdir -p app/src/main/res/layout
+          mkdir -p app/src/main/res/drawable
 
           # 1. gradle.properties
           cat << 'EOF' > gradle.properties
@@ -104,23 +105,28 @@ jobs:
         env:
           PAYLOAD_DATA: ${{ toJson(github.event.client_payload) }}
         run: |
+          pip install pillow --quiet
           python3 - << 'PYEOF'
-          import os, json, base64, shutil
+          import os, json, base64, shutil, re
+          from PIL import Image, ImageDraw
 
           if os.path.exists("app/src/main/res/values"):
               shutil.rmtree("app/src/main/res/values")
 
           raw = os.environ.get("PAYLOAD_DATA", "{}")
           data = json.loads(raw)
+          title = data.get("app_name", "DynamicApp").strip()
 
+          # 1. Tulis Java
           j_b64 = data.get("java_code_b64", "")
           j_code = base64.b64decode(j_b64).decode("utf-8", "ignore")
           with open("app/src/main/java/com/stb/dynamicapp/MainActivity.java", "w", encoding="utf-8") as f:
               f.write(j_code)
 
+          # 2. Tulis Layout XML
           x_b64 = data.get("xml_code_b64", "")
           x_code = base64.b64decode(x_b64).decode("utf-8", "ignore").strip()
-          if x_code.startswith("$ufeff"):
+          if x_code.startswith("\ufeff"):
               x_code = x_code[1:]
 
           valid_tags = ["Layout", "View"]
@@ -133,7 +139,82 @@ jobs:
           with open("app/src/main/res/layout/activity_main.xml", "w", encoding="utf-8") as f:
               f.write(x_code)
 
-          print("Injeksi source code selesai!")
+          # 3. Buat Ikon Sesuai Tema Aplikasi
+          title_lower = title.lower()
+          if any(k in title_lower for k in ["kalkulator", "hitung", "math", "kasir"]):
+              bg_color, inner_bg, icon_type = (25, 118, 210), (33, 150, 243), "calc"
+          elif any(k in title_lower for k in ["game", "ketuk", "tap", "skor", "play", "main"]):
+              bg_color, inner_bg, icon_type = (123, 31, 162), (156, 39, 176), "game"
+          elif any(k in title_lower for k in ["catatan", "note", "memo", "todo", "tugas", "list"]):
+              bg_color, inner_bg, icon_type = (245, 124, 0), (255, 152, 0), "notes"
+          elif any(k in title_lower for k in ["stres", "relaks", "tenang", "sehat", "meditasi", "hati", "pereda"]):
+              bg_color, inner_bg, icon_type = (0, 121, 107), (0, 150, 136), "zen"
+          elif any(k in title_lower for k in ["musik", "lagu", "audio", "suara"]):
+              bg_color, inner_bg, icon_type = (211, 47, 47), (244, 67, 54), "music"
+          else:
+              bg_color, inner_bg, icon_type = (48, 63, 159), (63, 81, 181), "star"
+
+          img = Image.new("RGBA", (512, 512), (0, 0, 0, 0))
+          draw = ImageDraw.Draw(img)
+          draw.rounded_rectangle([24, 24, 488, 488], radius=115, fill=bg_color)
+          draw.ellipse([64, 64, 448, 448], fill=inner_bg)
+          white = (255, 255, 255, 255)
+
+          if icon_type == "calc":
+              draw.rounded_rectangle([130, 110, 382, 402], radius=28, fill=(255, 255, 255, 230))
+              draw.rounded_rectangle([155, 135, 357, 195], radius=12, fill=bg_color)
+              for y in [220, 280, 340]:
+                  for x in [160, 230]:
+                      draw.rounded_rectangle([x, y, x + 52, y + 42], radius=10, fill=inner_bg)
+              draw.rounded_rectangle([300, 220, 352, 262], radius=10, fill=inner_bg)
+              draw.rounded_rectangle([300, 280, 352, 382], radius=10, fill=(255, 87, 34, 255))
+          elif icon_type == "game":
+              draw.rounded_rectangle([100, 190, 412, 325], radius=60, fill=white)
+              draw.ellipse([100, 250, 190, 380], fill=white)
+              draw.ellipse([322, 250, 412, 380], fill=white)
+              draw.rounded_rectangle([165, 220, 185, 290], radius=4, fill=bg_color)
+              draw.rounded_rectangle([150, 235, 200, 275], radius=4, fill=bg_color)
+              draw.ellipse([335, 225, 355, 245], fill=(244, 67, 54, 255))
+              draw.ellipse([335, 265, 355, 285], fill=(76, 175, 80, 255))
+              draw.ellipse([315, 245, 335, 265], fill=(33, 150, 243, 255))
+              draw.ellipse([355, 245, 375, 265], fill=(255, 193, 7, 255))
+          elif icon_type == "notes":
+              draw.rounded_rectangle([145, 110, 367, 402], radius=24, fill=white)
+              draw.rounded_rectangle([145, 110, 367, 165], radius=16, fill=(211, 47, 47, 255))
+              for bx in [190, 256, 322]:
+                  draw.ellipse([bx - 10, 125, bx + 10, 145], fill=white)
+              for gy in [210, 260, 310, 360]:
+                  draw.rounded_rectangle([175, gy, 195, gy + 20], radius=5, fill=inner_bg)
+                  draw.rounded_rectangle([215, gy + 3, 335, gy + 17], radius=6, fill=(189, 189, 189, 255))
+          elif icon_type == "zen":
+              draw.ellipse([140, 160, 270, 290], fill=white)
+              draw.ellipse([242, 160, 372, 290], fill=white)
+              draw.polygon([(143, 245), (369, 245), (256, 385)], fill=white)
+              draw.ellipse([175, 190, 210, 225], fill=inner_bg)
+          elif icon_type == "music":
+              draw.ellipse([140, 310, 215, 385], fill=white)
+              draw.ellipse([275, 270, 350, 345], fill=white)
+              draw.rectangle([195, 160, 215, 345], fill=white)
+              draw.rectangle([330, 120, 350, 305], fill=white)
+              draw.polygon([(195, 160), (350, 120), (350, 175), (195, 215)], fill=white)
+          else:
+              draw.ellipse([196, 196, 316, 316], fill=white)
+
+          icon_final = img.resize((192, 192), Image.LANCZOS)
+          icon_final.save("app/src/main/res/drawable/ic_launcher.png", "PNG")
+
+          # 4. Sinkronisasi Nama Aplikasi & Ikon ke AndroidManifest.xml
+          clean_title = re.sub(r'[^a-zA-Z0-9 _-]', '', title).strip() or "DynamicApp"
+          manifest_file = "app/src/main/AndroidManifest.xml"
+          if os.path.exists(manifest_file):
+              with open(manifest_file, "r", encoding="utf-8") as mf:
+                  m_text = mf.read()
+              m_text = m_text.replace('android:icon="@android:drawable/sym_def_app_icon"', 'android:icon="@drawable/ic_launcher"')
+              m_text = m_text.replace('android:label="DynamicApp"', f'android:label="{clean_title}"')
+              with open(manifest_file, "w", encoding="utf-8") as mf:
+                  mf.write(m_text)
+
+          print("Injeksi source code, ikon tema, dan nama aplikasi selesai!")
           PYEOF
 
       - name: Setup Gradle Wrapper and Build APK
@@ -150,7 +231,7 @@ jobs:
           APP_TITLE: ${{ github.event.client_payload.app_name }}
         run: |
           python3 - << 'EOF'
-          import os, glob, requests
+          import os, glob, re, requests
 
           token = os.environ.get("BOT_TOKEN", "").strip()
           chat_id = os.environ.get("CHAT_ID", "").strip()
@@ -165,18 +246,27 @@ jobs:
               print("❌ ERROR: File APK tidak ditemukan di folder build!")
               exit(1)
 
-          apk_path = apk_files[0]
+          # Rename file APK fisik sesuai nama aplikasi
+          original_apk = apk_files[0]
+          safe_name = re.sub(r'[^a-zA-Z0-9_-]', '_', title).strip('_') or "DynamicApp"
+          new_file_name = f"{safe_name}.apk"
+          new_apk_path = os.path.join(os.path.dirname(original_apk), new_file_name)
+
+          if original_apk != new_apk_path:
+              os.rename(original_apk, new_apk_path)
+
+          apk_path = new_apk_path
           print(f"Mengirim APK: {apk_path}")
           print(f"Ke Chat ID: {chat_id}")
 
           url = f"https://api.telegram.org/bot{token}/sendDocument"
           payload = {
               "chat_id": chat_id,
-              "caption": f"✅ APK Berhasil Dikompilasi: {title}"
+              "caption": f"✅ APK Berhasil Dikompilasi: {title}\n📁 File: {new_file_name}"
           }
 
           with open(apk_path, "rb") as f:
-              files = {"document": (os.path.basename(apk_path), f, "application/vnd.android.package-archive")}
+              files = {"document": (new_file_name, f, "application/vnd.android.package-archive")}
               r = requests.post(url, data=payload, files=files, timeout=60)
 
           print("Status Telegram:", r.status_code)
@@ -195,6 +285,15 @@ jobs:
           CHAT_ID: ${{ github.event.client_payload.chat_id }}
           BOT_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
         run: |
-          if [ -n "$BOT_TOKEN" ]; then
-            curl -s -X POST "https://api.telegram.org/bot$({BOT_TOKEN}/sendMessage" -d "chat_id=$){CHAT_ID}" -d "text=❌ Gagal mengompilasi APK. Cek log GitHub Actions."
-          fi
+          python3 - << 'EOF'
+          import os, requests
+
+          token = os.environ.get("BOT_TOKEN", "").strip()
+          chat_id = os.environ.get("CHAT_ID", "").strip()
+
+          if token and chat_id:
+              requests.post(f"https://api.telegram.org/bot{token}/sendMessage", data={
+                  "chat_id": chat_id,
+                  "text": "❌ Gagal mengompilasi APK. Cek log GitHub Actions."
+              })
+          EOF
