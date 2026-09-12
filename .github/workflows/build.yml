@@ -1,4 +1,4 @@
-name: Dynamic Native Android Builder
+name: Build Dynamic Android APK
 
 on:
   repository_dispatch:
@@ -7,74 +7,66 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'zulu'
+          distribution: 'temurin'
           java-version: '17'
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Inject Dynamic Source Code
-        env:
-          APP_NAME: ${{ github.event.client_payload.app_name }}
-          JAVA_B64: ${{ github.event.client_payload.java_code_b64 }}
-          XML_B64: ${{ github.event.client_payload.xml_code_b64 }}
+      - name: Inject Dynamic App Code
         run: |
-          mkdir -p app/src/main/java/com/stb/dynamicapp app/src/main/res/layout app/src/main/res/values
+          mkdir -p app/src/main/java/com/stb/dynamicapp
+          mkdir -p app/src/main/res/layout
+          mkdir -p app/src/main/res/values
 
-          # 1. AndroidManifest.xml
-          printf '%s\n' '' '' '    ' '        ' '            ' '                ' '                ' '            ' '        ' '    ' '' > app/src/main/AndroidManifest.xml
+          # Dekode file kode Java
+          echo "${{ github.event.client_payload.java_code_b64 }}" | base64 -d > app/src/main/java/com/stb/dynamicapp/MainActivity.java
 
-          # 2. strings.xml
-          SAFE_APP_NAME="${APP_NAME:-Aplikasi Dinamis}"
-          printf '%s\n' '' '' "    ${SAFE_APP_NAME}" '' > app/src/main/res/values/strings.xml
+          # Dekode file layout XML
+          echo "${{ github.event.client_payload.xml_code_b64 }}" | base64 -d > app/src/main/res/layout/activity_main.xml
 
-          # 3. Decode Java & XML dari Bot Telegram
-          echo "$JAVA_B64" | base64 -d > app/src/main/java/com/stb/dynamicapp/MainActivity.java
-          echo "$XML_B64" | base64 -d > app/src/main/res/layout/activity_main.xml
-
-          # 4. Gradle Setup
-          cat << 'EOF' > build.gradle
-          buildscript {
-              repositories { google(); mavenCentral() }
-              dependencies { classpath "com.android.tools.build:gradle:8.2.2" }
-          }
-          allprojects {
-              repositories { google(); mavenCentral() }
-          }
-          EOF
-          echo "include ':app'" > settings.gradle
-          cat << 'EOF' > app/build.gradle
-          apply plugin: 'com.android.application'
-          android {
-              namespace 'com.stb.dynamicapp'
-              compileSdk 34
-              defaultConfig {
-                  applicationId "com.stb.dynamicapp"
-                  minSdk 21
-                  targetSdk 34
-                  versionCode 1
-                  versionName "1.0"
-              }
-          }
+          # Generate strings.xml yang valid dan bersih dari prolog error
+          CLEAN_APP_NAME=\((echo "\){{ github.event.client_payload.app_name }}" | tr -cd 'a-zA-Z0-9 _-')
+          cat < app/src/main/res/values/strings.xml
+          
+          
+              $CLEAN_APP_NAME
+          
           EOF
 
-      - name: Compile APK
-        run: |
-          gradle wrapper --gradle-version 8.5
-          ./gradlew assembleDebug --no-daemon
+      - name: Grant Execute Permission for Gradle
+        run: chmod +x gradlew
+
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --stacktrace
 
       - name: Send APK to Telegram
-        env:
-          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          CHAT_ID: ${{ github.event.client_payload.chat_id }}
-          APP_NAME: ${{ github.event.client_payload.app_name }}
+        if: success()
         run: |
-          APK_PATH=$(find app/build/outputs/apk -name "*.apk" | head -n 1)
-          curl -F chat_id="\(CHAT_ID" -F document=@"\)APK_PATH" -F caption="APK Native berhasil dibuat untuk: \({APP_NAME}!" "https://api.telegram.org/bot\){BOT_TOKEN}/sendDocument"
+          CHAT_ID="${{ github.event.client_payload.chat_id }}"
+          BOT_TOKEN="${{ secrets.TELEGRAM_TOKEN }}"
+          APK_PATH=$(find app/build/outputs/apk/debug/ -name "*.apk" | head -n 1)
+
+          if [ -f "$APK_PATH" ]; then
+            curl -F chat_id="$CHAT_ID" \
+                 -F document=@"$APK_PATH" \
+                 -F caption="✅ APK Berhasil Dikompilasi: ${{ github.event.client_payload.app_name }}" \
+                 https://api.telegram.org/bot${BOT_TOKEN}/sendDocument
+          fi
+
+      - name: Notify Failure to Telegram
+        if: failure()
+        run: |
+          CHAT_ID="${{ github.event.client_payload.chat_id }}"
+          BOT_TOKEN="${{ secrets.TELEGRAM_TOKEN }}"
+          curl -s -X POST https://api.telegram.org/bot${BOT_TOKEN}/sendMessage \
+               -d chat_id="$CHAT_ID" \
+               -d text="❌ Gagal mengompilasi APK. Terjadi error saat Gradle build."
