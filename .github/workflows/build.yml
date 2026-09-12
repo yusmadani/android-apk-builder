@@ -97,20 +97,8 @@ jobs:
           }
           EOF
 
-          # 5. AndroidManifest.xml (Wajib terisi lengkap)
-          cat << 'EOF' > app/src/main/AndroidManifest.xml
-          
-          
-              
-                  
-                      
-                          
-                          
-                      
-                  
-              
-          
-          EOF
+          # 5. AndroidManifest.xml (Ditulis via Base64 agar tidak hilang)
+          echo "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPG1hbmlmZXN0IHhtbG5zOmFuZHJvaWQ9Imh0dHA6Ly9zY2hlbWFzLmFuZHJvaWQuY29tL2Fway9yZXMvYW5kcm9pZCI+CiAgICA8YXBwbGljYXRpb24KICAgICAgICBhbmRyb2lkOmFsbG93QmFja3VwPSJ0cnVlIgogICAgICAgIGFuZHJvaWQ6aWNvbj0iQGFuZHJvaWQ6ZHJhd2FibGUvc3ltX2RlZl9hcHBfaWNvbiIKICAgICAgICBhbmRyb2lkOmxhYmVsPSJEeW5hbWljQXBwIgogICAgICAgIGFuZHJvaWQ6c3VwcG9ydHNSdGw9InRydWUiCiAgICAgICAgYW5kcm9pZDp0aGVtZT0iQHN0eWxlL1RoZW1lLk1hdGVyaWFsQ29tcG9uZW50cy5EYXlOaWdodC5EYXJrQWN0aW9uQmFyIj4KICAgICAgICA8YWN0aXZpdHkKICAgICAgICAgICAgYW5kcm9pZDpuYW1lPSIuTWFpbkFjdGl2aXR5IgogICAgICAgICAgICBhbmRyb2lkOmV4cG9ydGVkPSJ0cnVlIj4KICAgICAgICAgICAgPGludGVudC1maWx0ZXI+CiAgICAgICAgICAgICAgICA8YWN0aW9uIGFuZHJvaWQ6bmFtZT0iYW5kcm9pZC5pbnRlbnQuYWN0aW9uLk1BSU4iIC8+CiAgICAgICAgICAgICAgICA8Y2F0ZWdvcnkgYW5kcm9pZDpuYW1lPSJhbmRyb2lkLmludGVudC5jYXRlZ29yeS5MQVVOQ0hFUiIgLz4KICAgICAgICAgICAgPC9pbnRlbnQtZmlsdGVyPgogICAgICAgIDwvYWN0aXZpdHk+CiAgICA8L2FwcGxpY2F0aW9uPgo8L21hbmlmZXN0Pgo=" | base64 -d > app/src/main/AndroidManifest.xml
 
       - name: Inject Dynamic App Code via Python
         env:
@@ -125,13 +113,13 @@ jobs:
           raw = os.environ.get("PAYLOAD_DATA", "{}")
           data = json.loads(raw)
 
-          # 1. Tulis Java Code
+          # 1. Tulis Java
           j_b64 = data.get("java_code_b64", "")
           j_code = base64.b64decode(j_b64).decode("utf-8", "ignore")
           with open("app/src/main/java/com/stb/dynamicapp/MainActivity.java", "w", encoding="utf-8") as f:
               f.write(j_code)
 
-          # 2. Tulis Layout XML
+          # 2. Tulis Layout XML (Fallback layout aman via Base64)
           x_b64 = data.get("xml_code_b64", "")
           x_code = base64.b64decode(x_b64).decode("utf-8", "ignore").strip()
           if x_code.startswith("\ufeff"):
@@ -141,18 +129,19 @@ jobs:
           is_valid = any(t in x_code for t in valid_tags)
 
           if not x_code or not is_valid:
-              x_code = (
-                  '\n'
-                  '\n'
-                  '    \n'
-                  '\n'
-              )
+              fallback_b64 = "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPExpbmVhckxheW91dCB4bWxuczphbmRyb2lkPSJodHRwOi8vc2NoZW1hcy5hbmRyb2lkLmNvbS9hcGsvcmVzL2FuZHJvaWQiCiAgICBhbmRyb2lkOmxheW91dF93aWR0aD0ibWF0Y2hfcGFyZW50IgogICAgYW5kcm9pZDpsYXlvdXRfaGVpZ2h0PSJtYXRjaF9wYXJlbnQiCiAgICBhbmRyb2lkOmdyYXZpdHk9ImNlbnRlciIKICAgIGFuZHJvaWQ6b3JpZW50YXRpb249InZlcnRpY2FsIj4KICAgIDxUZXh0VmlldwogICAgICAgIGFuZHJvaWQ6bGF5b3V0X3dpZHRoPSJ3cmFwX2NvbnRlbnQiCiAgICAgICAgYW5kcm9pZDpsYXlvdXRfaGVpZ2h0PSJ3cmFwX2NvbnRlbnQiCiAgICAgICAgYW5kcm9pZDp0ZXh0PSJBcGxpa2FzaSBTaWFwIgogICAgICAgIGFuZHJvaWQ6dGV4dFNpemU9IjIwc3AiIC8+CjwvTGluZWFyTGF5b3V0Pgo="
+              x_code = base64.b64decode(fallback_b64).decode("utf-8")
 
           with open("app/src/main/res/layout/activity_main.xml", "w", encoding="utf-8") as f:
               f.write(x_code)
 
-          print("Injeksi Java & XML berhasil!")
+          print("Injeksi source code selesai!")
           PYEOF
+
+      - name: Verify Files
+        run: |
+          ls -la app/src/main/AndroidManifest.xml
+          cat app/src/main/AndroidManifest.xml
 
       - name: Setup Gradle Wrapper and Build APK
         run: |
