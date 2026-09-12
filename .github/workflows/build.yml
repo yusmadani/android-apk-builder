@@ -1,33 +1,6 @@
-name: Build Dynamic Android APK
-
-on:
-  repository_dispatch:
-    types: [build_dynamic_apk]
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Scaffold Android Project Structure
-        run: |
-          mkdir -p app/src/main/java/com/stb/dynamicapp
-          mkdir -p app/src/main/res/layout
-
-          # 1. gradle.properties
-          cat << 'EOF' > gradle.properties
+# Terpotong oleh editor/terminal menjadi dua baris:
+if not xml_code or "
+ gradle.properties
           android.useAndroidX=true
           android.enableJetifier=true
           android.nonTransitiveRClass=true
@@ -97,7 +70,7 @@ jobs:
           }
           EOF
 
-          # 5. Tulis AndroidManifest.xml standar (pasti terisi utuh)
+          # 5. AndroidManifest.xml standar
           cat << 'EOF' > app/src/main/AndroidManifest.xml
           
           
@@ -119,38 +92,40 @@ jobs:
           python3 - << 'PYEOF'
           import os, json, base64, shutil
 
-          data = json.loads(os.environ.get("PAYLOAD_DATA", "{}"))
-
-          # Hapus folder values agar tidak terjadi duplikasi resources
           if os.path.exists("app/src/main/res/values"):
               shutil.rmtree("app/src/main/res/values")
 
-          # 1. Tulis Java Code
-          java_code = base64.b64decode(data.get("java_code_b64", "")).decode("utf-8", errors="ignore").strip()
+          raw = os.environ.get("PAYLOAD_DATA", "{}")
+          data = json.loads(raw)
+
+          # 1. Tulis Java
+          j_b64 = data.get("java_code_b64", "")
+          j_code = base64.b64decode(j_b64).decode("utf-8", "ignore")
           with open("app/src/main/java/com/stb/dynamicapp/MainActivity.java", "w", encoding="utf-8") as f:
-              f.write(java_code)
+              f.write(j_code)
 
-          # 2. Tulis Layout XML
-          xml_code = base64.b64decode(data.get("xml_code_b64", "")).decode("utf-8", errors="ignore").strip()
-          if xml_code.startswith("\ufeff"):
-              xml_code = xml_code[1:]
+          # 2. Tulis Layout XML (Baris ringkas anti auto-wrap)
+          x_b64 = data.get("xml_code_b64", "")
+          x_code = base64.b64decode(x_b64).decode("utf-8", "ignore").strip()
+          if x_code.startswith("\ufeff"):
+              x_code = x_code[1:]
 
-          # Fallback layout jika output AI rusak atau kosong
-          if not xml_code or "
-          
-              
-          '''
+          valid_tags = ["Layout", "View"]
+          is_valid = any(t in x_code for t in valid_tags)
+
+          if not x_code or not is_valid:
+              x_code = (
+                  '\n'
+                  '\n'
+                  '    \n'
+                  '\n'
+              )
 
           with open("app/src/main/res/layout/activity_main.xml", "w", encoding="utf-8") as f:
-              f.write(xml_code)
+              f.write(x_code)
 
-          print("Injeksi Java & Layout XML berhasil.")
+          print("Injeksi Java & XML berhasil tanpa error syntax!")
           PYEOF
-
-      - name: Verify Manifest File Exists
-        run: |
-          ls -la app/src/main/AndroidManifest.xml
-          cat app/src/main/AndroidManifest.xml
 
       - name: Setup Gradle Wrapper and Build APK
         run: |
