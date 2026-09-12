@@ -59,11 +59,15 @@ jobs:
           print("Semua file proyek berhasil diinjeksi tanpa error shell!")
           PYEOF
 
-      - name: Grant Execute Permission for Gradle
-        run: chmod +x gradlew
-
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug --stacktrace
+     - name: Setup Gradle Wrapper and Build APK
+        run: |
+          # Buat wrapper jika belum ada di repository
+          if [ ! -f "gradlew" ]; then
+            echo "gradlew tidak ditemukan, membuat wrapper otomatis..."
+            gradle wrapper --gradle-version 8.5
+          fi
+          chmod +x gradlew
+          ./gradlew assembleDebug --stacktrace
 
       - name: Send APK to Telegram
         if: success()
