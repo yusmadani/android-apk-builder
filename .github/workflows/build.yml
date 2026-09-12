@@ -1,426 +1,186 @@
 name: Build Dynamic Android APK
 
 on:
-repository_dispatch:
-types: [build_dynamic_apk]
+  repository_dispatch:
+    types: [build_dynamic_apk]
 
 jobs:
-build:
-runs-on: ubuntu-latest
+  build:
+    runs-on: ubuntu-latest
 
-```
-steps:
-  # ============================================================
-  # 1. CHECKOUT
-  # ============================================================
-  - name: Checkout Repository
-    uses: actions/checkout@v4
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-  # ============================================================
-  # 2. JAVA 17
-  # ============================================================
-  - name: Set up JDK 17
-    uses: actions/setup-java@v4
-    with:
-      distribution: temurin
-      java-version: '17'
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
 
-  # ============================================================
-  # 3. ANDROID SDK
-  # ============================================================
-  - name: Setup Android SDK
-    uses: android-actions/setup-android@v3
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
 
-  # ============================================================
-  # 4. SCAFFOLD ANDROID PROJECT
-  # ============================================================
-  - name: Scaffold Android Project Structure
-    shell: bash
-    run: |
-      mkdir -p app/src/main/java/com/stb/dynamicapp
-      mkdir -p app/src/main/res/layout
-      mkdir -p app/src/main/res/values
+      - name: Scaffold Android Project Structure
+        run: |
+          mkdir -p app/src/main/java/com/stb/dynamicapp
+          mkdir -p app/src/main/res/layout
 
-      # --------------------------------------------------------
-      # gradle.properties
-      # --------------------------------------------------------
-      cat > gradle.properties <<'EOF'
-      android.useAndroidX=true
-      android.enableJetifier=true
-      android.nonTransitiveRClass=true
-      org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
-      EOF
+          # 1. gradle.properties
+          cat << 'EOF' > gradle.properties
+          android.useAndroidX=true
+          android.enableJetifier=true
+          android.nonTransitiveRClass=true
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          EOF
+          cp gradle.properties app/gradle.properties
 
-      # --------------------------------------------------------
-      # settings.gradle
-      # --------------------------------------------------------
-      cat > settings.gradle <<'EOF'
-      pluginManagement {
-          repositories {
-              google()
-              mavenCentral()
-              gradlePluginPortal()
+          # 2. settings.gradle
+          cat << 'EOF' > settings.gradle
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
           }
-      }
-
-      dependencyResolutionManagement {
-          repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-
-          repositories {
-              google()
-              mavenCentral()
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
           }
-      }
+          rootProject.name = "DynamicAndroidApp"
+          include ':app'
+          EOF
 
-      rootProject.name = "DynamicAndroidApp"
+          # 3. build.gradle (Root)
+          cat << 'EOF' > build.gradle
+          plugins {
+              id 'com.android.application' version '8.2.2' apply false
+          }
+          EOF
 
-      include(":app")
-      EOF
-
-      # --------------------------------------------------------
-      # Root build.gradle
-      # --------------------------------------------------------
-      cat > build.gradle <<'EOF'
-      plugins {
-          id 'com.android.application' version '8.2.2' apply false
-      }
-      EOF
-
-      # --------------------------------------------------------
-      # app/build.gradle
-      # --------------------------------------------------------
-      cat > app/build.gradle <<'EOF'
-      plugins {
-          id 'com.android.application'
-      }
-
-      android {
-          namespace 'com.stb.dynamicapp'
-          compileSdk 34
-
-          defaultConfig {
-              applicationId "com.stb.dynamicapp"
-              minSdk 21
-              targetSdk 34
-              versionCode 1
-              versionName "1.0"
+          # 4. app/build.gradle
+          cat << 'EOF' > app/build.gradle
+          plugins {
+              id 'com.android.application'
           }
 
-          buildTypes {
-              release {
-                  minifyEnabled false
+          android {
+              namespace 'com.stb.dynamicapp'
+              compileSdk 34
+
+              defaultConfig {
+                  applicationId "com.stb.dynamicapp"
+                  minSdk 21
+                  targetSdk 34
+                  versionCode 1
+                  versionName "1.0"
               }
 
-              debug {
-                  minifyEnabled false
+              buildTypes {
+                  release {
+                      minifyEnabled false
+                  }
+              }
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
               }
           }
 
-          compileOptions {
-              sourceCompatibility JavaVersion.VERSION_17
-              targetCompatibility JavaVersion.VERSION_17
+          dependencies {
+              implementation 'androidx.appcompat:appcompat:1.6.1'
+              implementation 'com.google.android.material:material:1.11.0'
           }
-      }
+          EOF
 
-      dependencies {
-          implementation 'androidx.appcompat:appcompat:1.6.1'
-          implementation 'com.google.android.material:material:1.11.0'
-      }
-      EOF
+          # 5. Tulis AndroidManifest.xml standar (pasti terisi utuh)
+          cat << 'EOF' > app/src/main/AndroidManifest.xml
+          
+          
+              
+                  
+                      
+                          
+                          
+                      
+                  
+              
+          
+          EOF
 
-      # --------------------------------------------------------
-      # AndroidManifest.xml
-      # --------------------------------------------------------
-      cat > app/src/main/AndroidManifest.xml <<'EOF'
-      <?xml version="1.0" encoding="utf-8"?>
+      - name: Inject Dynamic App Code via Python
+        env:
+          PAYLOAD_DATA: ${{ toJson(github.event.client_payload) }}
+        run: |
+          python3 - << 'PYEOF'
+          import os, json, base64, shutil
 
-      <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+          data = json.loads(os.environ.get("PAYLOAD_DATA", "{}"))
 
-          <application
-              android:allowBackup="true"
-              android:label="@string/app_name"
-              android:supportsRtl="true"
-              android:theme="@style/Theme.DynamicAndroidApp">
+          # Hapus folder values agar tidak terjadi duplikasi resources
+          if os.path.exists("app/src/main/res/values"):
+              shutil.rmtree("app/src/main/res/values")
 
-              <activity
-                  android:name=".MainActivity"
-                  android:exported="true">
+          # 1. Tulis Java Code
+          java_code = base64.b64decode(data.get("java_code_b64", "")).decode("utf-8", errors="ignore").strip()
+          with open("app/src/main/java/com/stb/dynamicapp/MainActivity.java", "w", encoding="utf-8") as f:
+              f.write(java_code)
 
-                  <intent-filter>
+          # 2. Tulis Layout XML
+          xml_code = base64.b64decode(data.get("xml_code_b64", "")).decode("utf-8", errors="ignore").strip()
+          if xml_code.startswith("\ufeff"):
+              xml_code = xml_code[1:]
 
-                      <action android:name="android.intent.action.MAIN" />
+          # Fallback layout jika output AI rusak atau kosong
+          if not xml_code or "
+          
+              
+          '''
 
-                      <category
-                          android:name="android.intent.category.LAUNCHER" />
+          with open("app/src/main/res/layout/activity_main.xml", "w", encoding="utf-8") as f:
+              f.write(xml_code)
 
-                  </intent-filter>
+          print("Injeksi Java & Layout XML berhasil.")
+          PYEOF
 
-              </activity>
+      - name: Verify Manifest File Exists
+        run: |
+          ls -la app/src/main/AndroidManifest.xml
+          cat app/src/main/AndroidManifest.xml
 
-          </application>
+      - name: Setup Gradle Wrapper and Build APK
+        run: |
+          gradle wrapper --gradle-version 8.5
+          chmod +x gradlew
+          ./gradlew assembleDebug -Pandroid.useAndroidX=true -Pandroid.enableJetifier=true --stacktrace
 
-      </manifest>
-      EOF
+      - name: Send APK to Telegram
+        if: success()
+        env:
+          CHAT_ID: ${{ github.event.client_payload.chat_id }}
+          BOT_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          APP_TITLE: ${{ github.event.client_payload.app_name }}
+        run: |
+          APK_PATH=$(find app/build/outputs/apk/debug/ -name "*.apk" | head -n 1)
+          if [ -n "\(BOT_TOKEN" ] && [ -f "\)APK_PATH" ]; then
+            curl -F chat_id="$CHAT_ID" \
+                 -F document=@"$APK_PATH" \
+                 -F caption="✅ APK Berhasil Dikompilasi: $APP_TITLE" \
+                 "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument"
+          fi
 
-      # --------------------------------------------------------
-      # strings.xml
-      # --------------------------------------------------------
-      cat > app/src/main/res/values/strings.xml <<'EOF'
-      <?xml version="1.0" encoding="utf-8"?>
-
-      <resources>
-
-          <string name="app_name">Dynamic Android App</string>
-
-      </resources>
-      EOF
-
-      # --------------------------------------------------------
-      # themes.xml
-      # --------------------------------------------------------
-      cat > app/src/main/res/values/themes.xml <<'EOF'
-      <?xml version="1.0" encoding="utf-8"?>
-
-      <resources>
-
-          <style
-              name="Theme.DynamicAndroidApp"
-              parent="Theme.MaterialComponents.DayNight.NoActionBar">
-          </style>
-
-      </resources>
-      EOF
-
-  # ============================================================
-  # 5. INJECT DYNAMIC JAVA + XML
-  # ============================================================
-  - name: Inject Dynamic App Code via Python
-    env:
-      PAYLOAD_DATA: ${{ toJson(github.event.client_payload) }}
-
-    run: |
-      python3 <<'PYEOF'
-      import os
-      import json
-      import base64
-
-      data = json.loads(
-          os.environ.get("PAYLOAD_DATA", "{}")
-      )
-
-      # ========================================================
-      # JAVA
-      # ========================================================
-
-      java_b64 = data.get("java_code_b64", "")
-
-      if not java_b64:
-          raise RuntimeError(
-              "java_code_b64 tidak ditemukan dalam client_payload"
-          )
-
-      try:
-          java_code = base64.b64decode(
-              java_b64
-          ).decode(
-              "utf-8"
-          ).strip()
-
-      except Exception as e:
-          raise RuntimeError(
-              f"Gagal decode java_code_b64: {e}"
-          )
-
-      if not java_code:
-          raise RuntimeError(
-              "Java code kosong"
-          )
-
-      with open(
-          "app/src/main/java/com/stb/dynamicapp/MainActivity.java",
-          "w",
-          encoding="utf-8"
-      ) as f:
-          f.write(java_code)
-
-      # ========================================================
-      # XML
-      # ========================================================
-
-      xml_b64 = data.get("xml_code_b64", "")
-
-      if xml_b64:
-          try:
-              xml_code = base64.b64decode(
-                  xml_b64
-              ).decode(
-                  "utf-8"
-              ).strip()
-
-          except Exception as e:
-              raise RuntimeError(
-                  f"Gagal decode xml_code_b64: {e}"
-              )
-      else:
-          xml_code = ""
-
-      # Hilangkan BOM
-      if xml_code.startswith("\ufeff"):
-          xml_code = xml_code[1:]
-
-      # ========================================================
-      # FALLBACK XML
-      # ========================================================
-
-      if not xml_code:
-          xml_code = """<?xml version="1.0" encoding="utf-8"?>
-
-      <LinearLayout
-          xmlns:android="http://schemas.android.com/apk/res/android"
-          android:layout_width="match_parent"
-          android:layout_height="match_parent"
-          android:orientation="vertical"
-          android:gravity="center"
-          android:padding="24dp">
-
-          <TextView
-              android:id="@+id/textView"
-              android:layout_width="wrap_content"
-              android:layout_height="wrap_content"
-              android:text="Dynamic Android App"
-              android:textSize="22sp" />
-
-      </LinearLayout>
-      """
-
-      with open(
-          "app/src/main/res/layout/activity_main.xml",
-          "w",
-          encoding="utf-8"
-      ) as f:
-          f.write(xml_code)
-
-      print("======================================")
-      print("Dynamic code injection berhasil")
-      print("Java : OK")
-      print("XML  : OK")
-      print("======================================")
-      PYEOF
-
-  # ============================================================
-  # 6. VERIFY FILES
-  # ============================================================
-  - name: Verify Android Project
-    run: |
-      echo "===== AndroidManifest.xml ====="
-      cat app/src/main/AndroidManifest.xml
-
-      echo ""
-      echo "===== MainActivity.java ====="
-      cat app/src/main/java/com/stb/dynamicapp/MainActivity.java
-
-      echo ""
-      echo "===== activity_main.xml ====="
-      cat app/src/main/res/layout/activity_main.xml
-
-  # ============================================================
-  # 7. SETUP GRADLE
-  # ============================================================
-  - name: Setup Gradle
-    uses: gradle/actions/setup-gradle@v4
-    with:
-      gradle-version: '8.5'
-
-  # ============================================================
-  # 8. GENERATE GRADLE WRAPPER
-  # ============================================================
-  - name: Generate Gradle Wrapper
-    run: |
-      gradle wrapper --gradle-version 8.5
-      chmod +x gradlew
-
-  # ============================================================
-  # 9. BUILD APK
-  # ============================================================
-  - name: Build Debug APK
-    run: |
-      ./gradlew assembleDebug \
-        --stacktrace \
-        --no-daemon \
-        -Pandroid.useAndroidX=true \
-        -Pandroid.enableJetifier=true
-
-  # ============================================================
-  # 10. FIND APK
-  # ============================================================
-  - name: Find APK
-    id: apk
-    run: |
-      APK_PATH=$(find \
-        app/build/outputs/apk/debug/ \
-        -type f \
-        -name "*.apk" \
-        | head -n 1)
-
-      if [ -z "$APK_PATH" ]; then
-        echo "APK tidak ditemukan!"
-        exit 1
-      fi
-
-      echo "APK ditemukan:"
-      echo "$APK_PATH"
-
-      echo "apk_path=$APK_PATH" >> "$GITHUB_OUTPUT"
-
-  # ============================================================
-  # 11. SEND APK TO TELEGRAM
-  # ============================================================
-  - name: Send APK to Telegram
-    if: success()
-    env:
-      CHAT_ID: ${{ github.event.client_payload.chat_id }}
-      BOT_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-      APP_TITLE: ${{ github.event.client_payload.app_name }}
-
-    run: |
-      APK_PATH="${{ steps.apk.outputs.apk_path }}"
-
-      if [ -z "$BOT_TOKEN" ]; then
-        echo "TELEGRAM_TOKEN belum tersedia"
-        exit 1
-      fi
-
-      if [ -z "$CHAT_ID" ]; then
-        echo "chat_id tidak tersedia"
-        exit 1
-      fi
-
-      if [ ! -f "$APK_PATH" ]; then
-        echo "APK tidak ditemukan: $APK_PATH"
-        exit 1
-      fi
-
-      curl -sS \
-        -F "chat_id=$CHAT_ID" \
-        -F "document=@$APK_PATH" \
-        -F "caption=✅ APK Berhasil Dikompilasi: $APP_TITLE" \
-        "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument"
-
-  # ============================================================
-  # 12. NOTIFY FAILURE
-  # ============================================================
-  - name: Notify Failure to Telegram
-    if: failure()
-    env:
-      CHAT_ID: ${{ github.event.client_payload.chat_id }}
-      BOT_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-
-    run: |
-      if [ -n "$BOT_TOKEN" ] && [ -n "$CHAT_ID" ]; then
-        curl -sS \
-          -X POST \
-          "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
-          -d "chat_id=$CHAT_ID" \
-          -d "text=❌ Gagal mengompilasi APK. Cek detail error di GitHub Actions."
-      fi
-```
+      - name: Notify Failure to Telegram
+        if: failure()
+        env:
+          CHAT_ID: ${{ github.event.client_payload.chat_id }}
+          BOT_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+        run: |
+          if [ -n "$BOT_TOKEN" ]; then
+            curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+                 -d chat_id="$CHAT_ID" \
+                 -d text="❌ Gagal mengompilasi APK. Cek detail error di log GitHub Actions."
+          fi
