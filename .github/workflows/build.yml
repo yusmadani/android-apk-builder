@@ -108,7 +108,6 @@ jobs:
           pip install pillow --quiet
           python3 - << 'PYEOF'
           import os, json, base64, shutil, re
-          import xml.etree.ElementTree as ET
           from PIL import Image, ImageDraw
 
           if os.path.exists("app/src/main/res/values"):
@@ -124,23 +123,17 @@ jobs:
           with open("app/src/main/java/com/stb/dynamicapp/MainActivity.java", "w", encoding="utf-8") as f:
               f.write(j_code)
 
-          # 2. Tulis Layout XML dengan Validasi Parser
+          # 2. Tulis Layout XML
           x_b64 = data.get("xml_code_b64", "")
           x_code = base64.b64decode(x_b64).decode("utf-8", "ignore").strip()
           if x_code.startswith("\ufeff"):
               x_code = x_code[1:]
 
-          fallback_b64 = "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPExpbmVhckxheW91dCB4bWxuczphbmRyb2lkPSJodHRwOi8vc2NoZW1hcy5hbmRyb2lkLmNvbS9hcGsvcmVzL2FuZHJvaWQiCiAgICBhbmRyb2lkOmxheW91dF93aWR0aD0ibWF0Y2hfcGFyZW50IgogICAgYW5kcm9pZDpsYXlvdXRfaGVpZ2h0PSJtYXRjaF9wYXJlbnQiCiAgICBhbmRyb2lkOmdyYXZpdHk9ImNlbnRlciIKICAgIGFuZHJvaWQ6b3JpZW50YXRpb249InZlcnRpY2FsIj4KICAgIDxUZXh0VmlldwogICAgICAgIGFuZHJvaWQ6bGF5b3V0X3dpZHRoPSJ3cmFwX2NvbnRlbnQiCiAgICAgICAgYW5kcm9pZDpsYXlvdXRfaGVpZ2h0PSJ3cmFwX2NvbnRlbnQiCiAgICAgICAgYW5kcm9pZDp0ZXh0PSJBcGxpa2FzaSBTaWFwIgogICAgICAgIGFuZHJvaWQ6dGV4dFNpemU9IjIwc3AiIC8+CjwvTGluZWFyTGF5b3V0Pgo="
+          valid_tags = ["Layout", "View"]
+          is_valid = any(t in x_code for t in valid_tags)
 
-          is_valid_xml = False
-          if x_code and ("Layout" in x_code or "View" in x_code):
-              try:
-                  ET.fromstring(x_code)
-                  is_valid_xml = True
-              except Exception as err:
-                  print(f"[WARN] Sintaks XML dari AI rusak ({err}). Menggunakan fallback layout.")
-
-          if not is_valid_xml:
+          if not x_code or not is_valid:
+              fallback_b64 = "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPExpbmVhckxheW91dCB4bWxuczphbmRyb2lkPSJodHRwOi8vc2NoZW1hcy5hbmRyb2lkLmNvbS9hcGsvcmVzL2FuZHJvaWQiCiAgICBhbmRyb2lkOmxheW91dF93aWR0aD0ibWF0Y2hfcGFyZW50IgogICAgYW5kcm9pZDpsYXlvdXRfaGVpZ2h0PSJtYXRjaF9wYXJlbnQiCiAgICBhbmRyb2lkOmdyYXZpdHk9ImNlbnRlciIKICAgIGFuZHJvaWQ6b3JpZW50YXRpb249InZlcnRpY2FsIj4KICAgIDxUZXh0VmlldwogICAgICAgIGFuZHJvaWQ6bGF5b3V0X3dpZHRoPSJ3cmFwX2NvbnRlbnQiCiAgICAgICAgYW5kcm9pZDpsYXlvdXRfaGVpZ2h0PSJ3cmFwX2NvbnRlbnQiCiAgICAgICAgYW5kcm9pZDp0ZXh0PSJBcGxpa2FzaSBTaWFwIgogICAgICAgIGFuZHJvaWQ6dGV4dFNpemU9IjIwc3AiIC8+CjwvTGluZWFyTGF5b3V0Pgo="
               x_code = base64.b64decode(fallback_b64).decode("utf-8")
 
           with open("app/src/main/res/layout/activity_main.xml", "w", encoding="utf-8") as f:
@@ -221,7 +214,7 @@ jobs:
               with open(manifest_file, "w", encoding="utf-8") as mf:
                   mf.write(m_text)
 
-          print("Injeksi source code, ikon tema, dan verifikasi layout XML selesai!")
+          print("Injeksi source code, ikon tema, dan nama aplikasi selesai!")
           PYEOF
 
       - name: Setup Gradle Wrapper and Build APK
@@ -253,6 +246,7 @@ jobs:
               print("❌ ERROR: File APK tidak ditemukan di folder build!")
               exit(1)
 
+          # Rename file APK fisik sesuai nama aplikasi
           original_apk = apk_files[0]
           safe_name = re.sub(r'[^a-zA-Z0-9_-]', '_', title).strip('_') or "DynamicApp"
           new_file_name = f"{safe_name}.apk"
