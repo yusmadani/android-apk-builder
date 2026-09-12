@@ -26,6 +26,7 @@ jobs:
           mkdir -p app/src/main/java/com/stb/dynamicapp
           mkdir -p app/src/main/res/layout
           mkdir -p app/src/main/res/drawable
+          mkdir -p app/src/main/res/mipmap
 
           # 1. gradle.properties
           cat << 'EOF' > gradle.properties
@@ -99,15 +100,28 @@ jobs:
           EOF
 
           # 5. AndroidManifest.xml
-          echo "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPG1hbmlmZXN0IHhtbG5zOmFuZHJvaWQ9Imh0dHA6Ly9zY2hlbWFzLmFuZHJvaWQuY29tL2Fway9yZXMvYW5kcm9pZCI+CiAgICA8YXBwbGljYXRpb24KICAgICAgICBhbmRyb2lkOmFsbG93QmFja3VwPSJ0cnVlIgogICAgICAgIGFuZHJvaWQ6aWNvbj0iQGFuZHJvaWQ6ZHJhd2FibGUvc3ltX2RlZl9hcHBfaWNvbiIKICAgICAgICBhbmRyb2lkOmxhYmVsPSJEeW5hbWljQXBwIgogICAgICAgIGFuZHJvaWQ6c3VwcG9ydHNSdGw9InRydWUiCiAgICAgICAgYW5kcm9pZDp0aGVtZT0iQHN0eWxlL1RoZW1lLk1hdGVyaWFsQ29tcG9uZW50cy5EYXlOaWdodC5EYXJrQWN0aW9uQmFyIj4KICAgICAgICA8YWN0aXZpdHkKICAgICAgICAgICAgYW5kcm9pZDpuYW1lPSIuTWFpbkFjdGl2aXR5IgogICAgICAgICAgICBhbmRyb2lkOmV4cG9ydGVkPSJ0cnVlIj4KICAgICAgICAgICAgPGludGVudC1maWx0ZXI+CiAgICAgICAgICAgICAgICA8YWN0aW9uIGFuZHJvaWQ6bmFtZT0iYW5kcm9pZC5pbnRlbnQuYWN0aW9uLk1BSU4iIC8+CiAgICAgICAgICAgICAgICA8Y2F0ZWdvcnkgYW5kcm9pZDpuYW1lPSJhbmRyb2lkLmludGVudC5jYXRlZ29yeS5MQVVOQ0hFUiIgLz4KICAgICAgICAgICAgPC9pbnRlbnQtZmlsdGVyPgogICAgICAgIDwvYWN0aXZpdHk+CiAgICA8L2FwcGxpY2F0aW9uPgo8L21hbmlmZXN0Pgo=" | base64 -d > app/src/main/AndroidManifest.xml
+          cat << 'EOF' > app/src/main/AndroidManifest.xml
+          
+          
+              
+                  
+                      
+                          
+                          
+                      
+                  
+              
+          
+          EOF
 
-      - name: Inject Dynamic App Code via Python
+      - name: Inject Dynamic App Code, Themed Icon & Sanitize via Python
         env:
           PAYLOAD_DATA: ${{ toJson(github.event.client_payload) }}
         run: |
           pip install pillow --quiet
           python3 - << 'PYEOF'
-          import os, json, base64, shutil, re
+          import os, json, base64, shutil, re, math
+          import xml.etree.ElementTree as ET
           from PIL import Image, ImageDraw
 
           if os.path.exists("app/src/main/res/values"):
@@ -117,31 +131,72 @@ jobs:
           data = json.loads(raw)
           title = data.get("app_name", "DynamicApp").strip()
 
-          # 1. Tulis Java
+          # ==========================================
+          # 1. TULIS JAVA & SUNTIKKAN AUTO-IMPORT LENGKAP
+          # ==========================================
           j_b64 = data.get("java_code_b64", "")
           j_code = base64.b64decode(j_b64).decode("utf-8", "ignore")
+
+          auto_imports = """package com.stb.dynamicapp;
+
+          import android.app.Activity;
+          import android.content.Context;
+          import android.content.SharedPreferences;
+          import android.graphics.Canvas;
+          import android.graphics.Color;
+          import android.graphics.Paint;
+          import android.graphics.RectF;
+          import android.os.Bundle;
+          import android.view.View;
+          import android.view.ViewGroup;
+          import android.widget.*;
+          import android.content.Intent;
+          """
+          if "package com.stb.dynamicapp;" in j_code:
+              j_code = j_code.replace("package com.stb.dynamicapp;", auto_imports.strip())
+          else:
+              j_code = auto_imports.strip() + "\n" + j_code
+
           with open("app/src/main/java/com/stb/dynamicapp/MainActivity.java", "w", encoding="utf-8") as f:
               f.write(j_code)
 
-          # 2. Tulis Layout XML
+          # ==========================================
+          # 2. SANITASI & VALIDASI LAYOUT XML
+          # ==========================================
           x_b64 = data.get("xml_code_b64", "")
           x_code = base64.b64decode(x_b64).decode("utf-8", "ignore").strip()
           if x_code.startswith("\ufeff"):
               x_code = x_code[1:]
 
-          valid_tags = ["Layout", "View"]
-          is_valid = any(t in x_code for t in valid_tags)
+          # Escape simbol & mentah menjadi &
+          x_code = re.sub(r'&(?!(amp|lt|gt|quot|apos);)', '&', x_code)
 
-          if not x_code or not is_valid:
-              fallback_b64 = "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPExpbmVhckxheW91dCB4bWxuczphbmRyb2lkPSJodHRwOi8vc2NoZW1hcy5hbmRyb2lkLmNvbS9hcGsvcmVzL2FuZHJvaWQiCiAgICBhbmRyb2lkOmxheW91dF93aWR0aD0ibWF0Y2hfcGFyZW50IgogICAgYW5kcm9pZDpsYXlvdXRfaGVpZ2h0PSJtYXRjaF9wYXJlbnQiCiAgICBhbmRyb2lkOmdyYXZpdHk9ImNlbnRlciIKICAgIGFuZHJvaWQ6b3JpZW50YXRpb249InZlcnRpY2FsIj4KICAgIDxUZXh0VmlldwogICAgICAgIGFuZHJvaWQ6bGF5b3V0X3dpZHRoPSJ3cmFwX2NvbnRlbnQiCiAgICAgICAgYW5kcm9pZDpsYXlvdXRfaGVpZ2h0PSJ3cmFwX2NvbnRlbnQiCiAgICAgICAgYW5kcm9pZDp0ZXh0PSJBcGxpa2FzaSBTaWFwIgogICAgICAgIGFuZHJvaWQ6dGV4dFNpemU9IjIwc3AiIC8+CjwvTGluZWFyTGF5b3V0Pgo="
-              x_code = base64.b64decode(fallback_b64).decode("utf-8")
+          fallback_xml = """
+          
+              
+          """
+
+          is_valid_xml = False
+          if x_code and ("Layout" in x_code or "View" in x_code):
+              try:
+                  ET.fromstring(x_code)
+                  is_valid_xml = True
+              except Exception as err:
+                  print(f"[WARN] Sintaks XML tidak valid ({err}). Menggunakan fallback layout.")
+
+          if not is_valid_xml:
+              x_code = fallback_xml
 
           with open("app/src/main/res/layout/activity_main.xml", "w", encoding="utf-8") as f:
               f.write(x_code)
 
-          # 3. Buat Ikon Sesuai Tema Aplikasi
+          # ==========================================
+          # 3. GENERATE CUSTOM THEMED ICON (MATERIAL HD)
+          # ==========================================
           title_lower = title.lower()
-          if any(k in title_lower for k in ["kalkulator", "hitung", "math", "kasir"]):
+          if any(k in title_lower for k in ["gym", "workout", "fitness", "dumbel", "dumbbell", "katrol", "pulley", "otot"]):
+              bg_color, inner_bg, icon_type = (216, 67, 21), (230, 81, 0), "gym" # Deep Orange/Gym
+          elif any(k in title_lower for k in ["kalkulator", "hitung", "math", "kasir"]):
               bg_color, inner_bg, icon_type = (25, 118, 210), (33, 150, 243), "calc"
           elif any(k in title_lower for k in ["game", "ketuk", "tap", "skor", "play", "main"]):
               bg_color, inner_bg, icon_type = (123, 31, 162), (156, 39, 176), "game"
@@ -160,7 +215,16 @@ jobs:
           draw.ellipse([64, 64, 448, 448], fill=inner_bg)
           white = (255, 255, 255, 255)
 
-          if icon_type == "calc":
+          if icon_type == "gym":
+              # Dumbbell Icon
+              draw.rounded_rectangle([190, 244, 322, 268], radius=8, fill=white) # Bar tengah
+              # Beban Kiri
+              draw.rounded_rectangle([140, 180, 190, 332], radius=14, fill=white)
+              draw.rounded_rectangle([110, 205, 140, 307], radius=10, fill=white)
+              # Beban Kanan
+              draw.rounded_rectangle([322, 180, 372, 332], radius=14, fill=white)
+              draw.rounded_rectangle([372, 205, 402, 307], radius=10, fill=white)
+          elif icon_type == "calc":
               draw.rounded_rectangle([130, 110, 382, 402], radius=28, fill=(255, 255, 255, 230))
               draw.rounded_rectangle([155, 135, 357, 195], radius=12, fill=bg_color)
               for y in [220, 280, 340]:
@@ -198,30 +262,39 @@ jobs:
               draw.rectangle([330, 120, 350, 305], fill=white)
               draw.polygon([(195, 160), (350, 120), (350, 175), (195, 215)], fill=white)
           else:
-              draw.ellipse([196, 196, 316, 316], fill=white)
+              pts = []
+              for i in range(10):
+                  ang = i * math.pi / 5 - math.pi / 2
+                  r = 145 if i % 2 == 0 else 70
+                  pts.append((256 + r * math.cos(ang), 256 + r * math.sin(ang)))
+              draw.polygon(pts, fill=white)
+              draw.ellipse([230, 230, 282, 282], fill=bg_color)
 
           icon_final = img.resize((192, 192), Image.LANCZOS)
           icon_final.save("app/src/main/res/drawable/ic_launcher.png", "PNG")
+          icon_final.save("app/src/main/res/mipmap/ic_launcher.png", "PNG")
 
-          # 4. Sinkronisasi Nama Aplikasi & Ikon ke AndroidManifest.xml
+          # ==========================================
+          # 4. SINKRONISASI MANIFEST (LABEL NAMA APP)
+          # ==========================================
           clean_title = re.sub(r'[^a-zA-Z0-9 _-]', '', title).strip() or "DynamicApp"
           manifest_file = "app/src/main/AndroidManifest.xml"
           if os.path.exists(manifest_file):
               with open(manifest_file, "r", encoding="utf-8") as mf:
                   m_text = mf.read()
-              m_text = m_text.replace('android:icon="@android:drawable/sym_def_app_icon"', 'android:icon="@drawable/ic_launcher"')
               m_text = m_text.replace('android:label="DynamicApp"', f'android:label="{clean_title}"')
               with open(manifest_file, "w", encoding="utf-8") as mf:
                   mf.write(m_text)
 
-          print("Injeksi source code, ikon tema, dan nama aplikasi selesai!")
+          print("✅ Persiapan kode, sanitasi, dan ikon tematik selesai.")
           PYEOF
 
       - name: Setup Gradle Wrapper and Build APK
         run: |
           gradle wrapper --gradle-version 8.5
           chmod +x gradlew
-          ./gradlew assembleDebug -Pandroid.useAndroidX=true -Pandroid.enableJetifier=true --stacktrace
+          set -o pipefail
+          ./gradlew assembleDebug -Pandroid.useAndroidX=true -Pandroid.enableJetifier=true --stacktrace 2>&1 | tee build_output.log
 
       - name: Send APK to Telegram
         if: success()
@@ -238,15 +311,14 @@ jobs:
           title = os.environ.get("APP_TITLE", "Aplikasi").strip()
 
           if not token:
-              print("❌ ERROR: Secret TELEGRAM_TOKEN belum disetel di Settings > Secrets GitHub!")
+              print("ERROR: Secret TELEGRAM_TOKEN belum disetel!")
               exit(1)
 
           apk_files = glob.glob("app/build/outputs/apk/debug/*.apk")
           if not apk_files:
-              print("❌ ERROR: File APK tidak ditemukan di folder build!")
+              print("ERROR: File APK tidak ditemukan di folder output!")
               exit(1)
 
-          # Rename file APK fisik sesuai nama aplikasi
           original_apk = apk_files[0]
           safe_name = re.sub(r'[^a-zA-Z0-9_-]', '_', title).strip('_') or "DynamicApp"
           new_file_name = f"{safe_name}.apk"
@@ -255,31 +327,25 @@ jobs:
           if original_apk != new_apk_path:
               os.rename(original_apk, new_apk_path)
 
-          apk_path = new_apk_path
-          print(f"Mengirim APK: {apk_path}")
-          print(f"Ke Chat ID: {chat_id}")
-
           url = f"https://api.telegram.org/bot{token}/sendDocument"
           payload = {
               "chat_id": chat_id,
-              "caption": f"✅ APK Berhasil Dikompilasi: {title}\n📁 File: {new_file_name}"
+              "caption": f"✅ *{title}* berhasil dikompilasi!\n📁 File: `{new_file_name}`\n🎨 Ikon & layout telah disesuaikan.",
+              "parse_mode": "Markdown"
           }
 
-          with open(apk_path, "rb") as f:
+          with open(new_apk_path, "rb") as f:
               files = {"document": (new_file_name, f, "application/vnd.android.package-archive")}
-              r = requests.post(url, data=payload, files=files, timeout=60)
-
-          print("Status Telegram:", r.status_code)
-          print("Respon:", r.text)
+              r = requests.post(url, data=payload, files=files, timeout=90)
 
           if not r.json().get("ok"):
-              print("❌ Telegram menolak pengiriman file!")
+              print("Telegram menolak pengiriman file!")
               exit(1)
 
-          print("✅ Berhasil terkirim ke Telegram!")
+          print(f"✅ APK {new_file_name} berhasil dikirim ke Telegram!")
           EOF
 
-      - name: Notify Failure to Telegram
+      - name: Notify Failure to Telegram with Extracted Error
         if: failure()
         env:
           CHAT_ID: ${{ github.event.client_payload.chat_id }}
@@ -291,9 +357,28 @@ jobs:
           token = os.environ.get("BOT_TOKEN", "").strip()
           chat_id = os.environ.get("CHAT_ID", "").strip()
 
-          if token and chat_id:
-              requests.post(f"https://api.telegram.org/bot{token}/sendMessage", data={
-                  "chat_id": chat_id,
-                  "text": "❌ Gagal mengompilasi APK. Cek log GitHub Actions."
-              })
+          if not token or not chat_id:
+              exit(0)
+
+          error_lines = []
+          if os.path.exists("build_output.log"):
+              with open("build_output.log", "r", encoding="utf-8", errors="ignore") as f:
+                  lines = f.readlines()
+
+              for idx, line in enumerate(lines):
+                  if "error:" in line.lower() or "failed" in line.lower() or "exception:" in line.lower():
+                      start = max(0, idx - 1)
+                      end = min(len(lines), idx + 4)
+                      for l in lines[start:end]:
+                          if l.strip() and l not in error_lines and "org.gradle." not in l:
+                              error_lines.append(l.strip())
+
+          error_snippet = "\n".join(error_lines[:15]) if error_lines else "Cek log tab GitHub Actions untuk detail."
+
+          msg = f"❌ *Kompilasi APK Gagal!*\n\n*Detail Error:*\n```\n{error_snippet[:3500]}\n```"
+          requests.post(f"https://api.telegram.org/bot{token}/sendMessage", data={
+              "chat_id": chat_id,
+              "text": msg,
+              "parse_mode": "Markdown"
+          })
           EOF
