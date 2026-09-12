@@ -12,7 +12,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup JDK 17
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
@@ -21,7 +21,90 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Inject Dynamic Files
+      - name: Scaffold Android Project Structure
+        run: |
+          mkdir -p app/src/main/java/com/stb/dynamicapp
+          mkdir -p app/src/main/res/layout
+          mkdir -p app/src/main/res/values
+
+          # 1. settings.gradle
+          cat << 'EOF' > settings.gradle
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "DynamicAndroidApp"
+          include ':app'
+          EOF
+
+          # 2. build.gradle (Root)
+          cat << 'EOF' > build.gradle
+          plugins {
+              id 'com.android.application' version '8.2.2' apply false
+          }
+          EOF
+
+          # 3. app/build.gradle
+          cat << 'EOF' > app/build.gradle
+          plugins {
+              id 'com.android.application'
+          }
+
+          android {
+              namespace 'com.stb.dynamicapp'
+              compileSdk 34
+
+              defaultConfig {
+                  applicationId "com.stb.dynamicapp"
+                  minSdk 21
+                  targetSdk 34
+                  versionCode 1
+                  versionName "1.0"
+              }
+
+              buildTypes {
+                  release {
+                      minifyEnabled false
+                  }
+              }
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+          }
+
+          dependencies {
+              implementation 'androidx.appcompat:appcompat:1.6.1'
+              implementation 'com.google.android.material:material:1.11.0'
+          }
+          EOF
+
+          # 4. AndroidManifest.xml
+          cat << 'EOF' > app/src/main/AndroidManifest.xml
+          
+          
+              
+                  
+                      
+                          
+                          
+                      
+                  
+              
+          
+          EOF
+
+      - name: Inject Dynamic App Code via Python
         env:
           PAYLOAD_DATA: ${{ toJson(github.event.client_payload) }}
         run: |
@@ -29,10 +112,6 @@ jobs:
           import os, json, base64, re
 
           data = json.loads(os.environ.get("PAYLOAD_DATA", "{}"))
-
-          os.makedirs("app/src/main/java/com/stb/dynamicapp", exist_ok=True)
-          os.makedirs("app/src/main/res/layout", exist_ok=True)
-          os.makedirs("app/src/main/res/values", exist_ok=True)
 
           # Tulis Java
           with open("app/src/main/java/com/stb/dynamicapp/MainActivity.java", "wb") as f:
@@ -45,18 +124,20 @@ jobs:
           # Tulis Strings XML
           raw_name = data.get("app_name", "DynamicApp")
           clean_name = re.sub(r'[^a-zA-Z0-9 _-]', '', raw_name).strip() or "DynamicApp"
-          xml_content = f'\n\n    {clean_name}\n\n'
+          xml_content = f'''
+          
+              {clean_name}
+          
+          '''
           with open("app/src/main/res/values/strings.xml", "w", encoding="utf-8") as f:
-              f.write(xml_content)
+              f.write(xml_content.strip() + "\n")
 
-          print("Injeksi source code selesai.")
+          print("Injeksi source code selesai!")
           PYEOF
 
-      - name: Run Build APK
+      - name: Setup Gradle Wrapper and Build APK
         run: |
-          if [ ! -f "gradlew" ]; then
-            gradle wrapper --gradle-version 8.5
-          fi
+          gradle wrapper --gradle-version 8.5
           chmod +x gradlew
           ./gradlew assembleDebug --stacktrace
 
@@ -67,15 +148,15 @@ jobs:
           BOT_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           APP_TITLE: ${{ github.event.client_payload.app_name }}
         run: |
-          APK=$(find app/build/outputs/apk/debug/ -name "*.apk" | head -n 1)
-          if [ -f "$APK" ]; then
+          APK_PATH=$(find app/build/outputs/apk/debug/ -name "*.apk" | head -n 1)
+          if [ -f "$APK_PATH" ]; then
             curl -F chat_id="$CHAT_ID" \
-                 -F document=@"$APK" \
-                 -F caption="✅ APK Selesai Dibuat: $APP_TITLE" \
+                 -F document=@"$APK_PATH" \
+                 -F caption="✅ APK Berhasil Dikompilasi: $APP_TITLE" \
                  "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument"
           fi
 
-      - name: Alert Build Failure
+      - name: Notify Failure to Telegram
         if: failure()
         env:
           CHAT_ID: ${{ github.event.client_payload.chat_id }}
@@ -83,4 +164,4 @@ jobs:
         run: |
           curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
                -d chat_id="$CHAT_ID" \
-               -d text="❌ Build Gradle gagal. Silakan periksa log Actions GitHub."
+               -d text="❌ Gagal mengompilasi APK. Cek detail error di log GitHub Actions."
