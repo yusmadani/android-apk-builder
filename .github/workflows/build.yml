@@ -21,7 +21,7 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Python Tooling
+      - name: Install Python Dependencies
         run: pip install pillow requests --quiet
 
       - name: Scaffold Project and Inject Code (Pure Python Runner)
@@ -38,7 +38,7 @@ jobs:
           import xml.etree.ElementTree as ET
           from PIL import Image, ImageDraw
 
-          # 1. Buat Direktori Proyek
+          # 1. Buat folder struktur proyek
           os.makedirs("app/src/main/java/com/stb/dynamicapp", exist_ok=True)
           os.makedirs("app/src/main/res/layout", exist_ok=True)
           os.makedirs("app/src/main/res/drawable", exist_ok=True)
@@ -47,17 +47,17 @@ jobs:
           if os.path.exists("app/src/main/res/values"):
               shutil.rmtree("app/src/main/res/values")
 
-          # 2. Tulis File Konfigurasi Gradle
-          gradle_props = (
+          # 2. Tulis file konfigurasi Gradle
+          gradle_properties = (
               "android.useAndroidX=true\n"
               "android.enableJetifier=true\n"
               "android.nonTransitiveRClass=true\n"
               "org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8\n"
           )
           with open("gradle.properties", "w", encoding="utf-8") as f:
-              f.write(gradle_props)
+              f.write(gradle_properties)
           with open("app/gradle.properties", "w", encoding="utf-8") as f:
-              f.write(gradle_props)
+              f.write(gradle_properties)
 
           settings_gradle = (
               "pluginManagement {\n"
@@ -115,13 +115,13 @@ jobs:
           with open("app/build.gradle", "w", encoding="utf-8") as f:
               f.write(app_build_gradle)
 
-          # 3. Parse Payload dari Telegram
+          # 3. Parse Payload dari Bot Telegram
           raw_payload = os.environ.get("PAYLOAD_DATA", "{}")
           data = json.loads(raw_payload)
           title = data.get("app_name", "DynamicApp").strip()
           clean_title = re.sub(r'[^a-zA-Z0-9 ]', '', title).strip()[:25] or "HomeGymTracker"
 
-          # 4. Tulis AndroidManifest.xml (Tema Native Anti Force-Close)
+          # 4. Tulis AndroidManifest.xml (Bersih kolom 1 baris 1 & tema anti-crash)
           manifest_content = (
               '\n'
               '\n'
@@ -138,7 +138,7 @@ jobs:
           with open("app/src/main/AndroidManifest.xml", "w", encoding="utf-8") as f:
               f.write(manifest_content)
 
-          # 5. Tulis MainActivity.java (Sanitasi String & Auto-Imports)
+          # 5. Tulis MainActivity.java (Sanitasi string literal & auto-import)
           j_b64 = data.get("java_code_b64", "")
           j_code = base64.b64decode(j_b64).decode("utf-8", "ignore") if j_b64 else ""
 
@@ -170,7 +170,7 @@ jobs:
           with open("app/src/main/java/com/stb/dynamicapp/MainActivity.java", "w", encoding="utf-8") as f:
               f.write(j_code)
 
-          # 6. Tulis Layout XML (Garansi Validasi & Anti-Kosong)
+          # 6. Tulis Layout XML (Validasi anti-kosong & auto-fix ID)
           robust_default_xml = (
               '\n'
               '\n'
@@ -207,11 +207,6 @@ jobs:
           with open(xml_path, "w", encoding="utf-8") as f:
               f.write(final_xml.strip() + "\n")
 
-          # Cek fisik agar tidak 0 byte
-          if os.path.getsize(xml_path) == 0:
-              with open(xml_path, "w", encoding="utf-8") as f:
-                  f.write(robust_default_xml.strip() + "\n")
-
           # 7. Generate Ikon Tematik HD
           title_lower = title.lower()
           gym_keys = ["gym", "workout", "fitness", "dumbel", "dumbbell", "katrol", "pulley", "otot"]
@@ -245,10 +240,14 @@ jobs:
               for y in [220, 280, 340]:
                   for x in [160, 230]:
                       draw.rounded_rectangle([x, y, x + 52, y + 42], radius=10, fill=inner_bg)
+              draw.rounded_rectangle([300, 220, 352, 262], radius=10, fill=inner_bg)
+              draw.rounded_rectangle([300, 280, 352, 382], radius=10, fill=(255, 87, 34, 255))
           elif icon_type == "game":
               draw.rounded_rectangle([100, 190, 412, 325], radius=60, fill=white)
               draw.ellipse([100, 250, 190, 380], fill=white)
               draw.ellipse([322, 250, 412, 380], fill=white)
+              draw.rounded_rectangle([165, 220, 185, 290], radius=4, fill=bg_color)
+              draw.rounded_rectangle([150, 235, 200, 275], radius=4, fill=bg_color)
           else:
               pts = []
               for i in range(10):
@@ -261,7 +260,7 @@ jobs:
           icon_final = img.resize((192, 192), Image.LANCZOS)
           icon_final.save("app/src/main/res/drawable/ic_launcher.png", "PNG")
           icon_final.save("app/src/main/res/mipmap/ic_launcher.png", "PNG")
-          print("✅ Proyek, Manifest, Layout, dan Ikon berhasil dibuat tanpa error.")
+          print("Setup file, XML, dan Ikon berhasil dibuat tanpa kendala.")
 
       - name: Setup Gradle Wrapper and Build APK
         run: |
