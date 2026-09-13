@@ -148,35 +148,38 @@ jobs:
           with open("app/src/main/java/com/stb/dynamicapp/MainActivity.java", "w", encoding="utf-8") as f:
               f.write(j_code)
 
-          # ==========================================
+        # ==========================================
           # 2. SANITASI & VALIDASI LAYOUT XML
           # ==========================================
+          fallback_xml = """
+
+    
+"""
+
           x_b64 = data.get("xml_code_b64", "")
-          x_code = base64.b64decode(x_b64).decode("utf-8", "ignore").strip()
+          try:
+              x_code = base64.b64decode(x_b64).decode("utf-8", "ignore").strip()
+          except Exception:
+              x_code = ""
+
           if x_code.startswith("\ufeff"):
               x_code = x_code[1:]
 
-          # Escape karakter & mentah menjadi &
+          # Escape simbol & mentah
           x_code = re.sub(r'&(?!(amp|lt|gt|quot|apos);)', '&', x_code)
 
-          fallback_xml = """
-          
-              
-          """
-
           is_valid_xml = False
-          if x_code and ("Layout" in x_code or "View" in x_code):
+          if len(x_code) >= 30:
               try:
                   ET.fromstring(x_code)
                   is_valid_xml = True
               except Exception as err:
-                  print(f"[WARN] Sintaks XML tidak valid ({err}). Menggunakan fallback layout.")
+                  print(f"[WARN] Sintaks XML rusak ({err}). Menggunakan fallback layout.")
 
-          if not is_valid_xml:
-              x_code = fallback_xml
+          final_xml = x_code if is_valid_xml else fallback_xml
 
           with open("app/src/main/res/layout/activity_main.xml", "w", encoding="utf-8") as f:
-              f.write(x_code)
+              f.write(final_xml)
 
           # ==========================================
           # 3. BUAT IKON LAUNCHER TEMATIK HD
