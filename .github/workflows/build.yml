@@ -1,70 +1,427 @@
-name: Build Dynamic Android APK
+name: Build APK from AI
 
 on:
   repository_dispatch:
-    types: [build_dynamic_apk]
+    types: [build_apk]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+env:
+  ANDROID_COMPILE_SDK: "34"
+  ANDROID_BUILD_TOOLS: "34.0.0"
+  GRADLE_VERSION: "8.7"
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
+    timeout-minutes: 25
     steps:
-      - name: Checkout Repository
+      - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          distribution: temurin
+          java-version: "17"
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Install Gradle ${{ env.GRADLE_VERSION }}
+        run: |
+          curl -sSL -f "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" -o /tmp/gradle.zip
+          unzip -q /tmp/gradle.zip -d "$HOME"
+          echo "$HOME/gradle-${GRADLE_VERSION}/bin" >> "$GITHUB_PATH"
 
-      - name: Set up Python 3.10
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
+      - name: Set up Android SDK (cmdline-tools)
+        run: |
+          export ANDROID_HOME="$HOME/android-sdk"
+          mkdir -p "$ANDROID_HOME/cmdline-tools"
+          ( curl -sSL -f "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" -o /tmp/cmdline-tools.zip \
+            || curl -sSL -f "https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip" -o /tmp/cmdline-tools.zip )
+          unzip -q /tmp/cmdline-tools.zip -d "$ANDROID_HOME/cmdline-tools"
+          mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
 
-      - name: Install Python Libraries
-        run: pip install pillow requests --quiet
+      - name: Install SDK platform & build-tools
+        run: |
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager "platform-tools" "platforms;android-${ANDROID_COMPILE_SDK}" "build-tools;${ANDROID_BUILD_TOOLS}" > /dev/null
 
-      - name: Generate Project, Manifest, and Sanitize Code
+      # ---------------------------------------------------------------
+      # Titik kritis: TIDAK memakai heredoc bash (cat << 'EOF') untuk
+      # menyuntikkan kode Python. Step ini dijalankan langsung sebagai
+      # file Python murni oleh runner (bukan lewat bash), jadi karakter
+      # shell (<, >, |, &, backtick, kutip) di dalam script ini TIDAK
+      # pernah ditafsirkan oleh shell sama sekali.
+      # ---------------------------------------------------------------
+      - name: Generate & Sanitize Android Project
+        id: gen
         shell: python
         env:
-          PAYLOAD_DATA: ${{ toJson(github.event.client_payload) }}
+          APP_NAME_B64: ${{ github.event.client_payload.app_name_b64 }}
+          PACKAGE_NAME_RAW: ${{ github.event.client_payload.package_name }}
+          ACTIVITY_XML_B64: ${{ github.event.client_payload.activity_main_xml_b64 }}
+          MAIN_JAVA_B64: ${{ github.event.client_payload.main_activity_java_b64 }}
         run: |
-          import os
-          import json
           import base64
-          import shutil
+          import os
           import re
-          import math
-          import xml.etree.ElementTree as ET
-          from PIL import Image, ImageDraw
+          import time
+          from xml.sax.saxutils import escape as xml_escape
+          import xml.dom.minidom as minidom
 
-          # 1. Siapkan folder proyek
-          os.makedirs("app/src/main/java/com/stb/dynamicapp", exist_ok=True)
-          os.makedirs("app/src/main/res/layout", exist_ok=True)
-          os.makedirs("app/src/main/res/drawable", exist_ok=True)
-          os.makedirs("app/src/main/res/mipmap", exist_ok=True)
 
-          if os.path.exists("app/src/main/res/values"):
-              shutil.rmtree("app/src/main/res/values")
+          def b64d(value):
+              if not value:
+                  return ""
+              s = value.strip()
+              s += "=" * ((-len(s)) % 4)
+              try:
+                  return base64.b64decode(s).decode("utf-8", errors="replace")
+              except Exception:
+                  return ""
 
-          # 2. File konfigurasi Gradle
-          gradle_props = (
-              "android.useAndroidX=true\n"
-              "android.enableJetifier=true\n"
-              "android.nonTransitiveRClass=true\n"
-              "org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8\n"
+
+          def sanitize_package_name(pkg, app_name):
+              candidate = (pkg or "").strip()
+              pattern = r'^[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)+$'
+              if re.match(pattern, candidate):
+                  return candidate.lower()
+              slug = re.sub(r'[^a-z0-9]', '', (app_name or "app").lower())
+              if not slug:
+                  slug = "app"
+              if not slug[0].isalpha():
+                  slug = "a" + slug
+              return "com.aibuild.{}{}".format(slug[:20], int(time.time()) % 100000)
+
+
+          def esc_text(text):
+              return xml_escape(text or "App Android", {'"': "&quot;", "'": "&apos;"})
+
+
+          FALLBACK_LAYOUT = (
+              '<?xml version="1.0" encoding="utf-8"?>\n'
+              '<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"\n'
+              '    android:orientation="vertical"\n'
+              '    android:layout_width="match_parent"\n'
+              '    android:layout_height="match_parent"\n'
+              '    android:gravity="center"\n'
+              '    android:padding="24dp">\n\n'
+              '    <TextView\n'
+              '        android:id="@+id/tv_fallback"\n'
+              '        android:layout_width="wrap_content"\n'
+              '        android:layout_height="wrap_content"\n'
+              '        android:textSize="16sp"\n'
+              '        android:text="Layout tidak valid, memakai tampilan cadangan." />\n\n'
+              '</LinearLayout>\n'
           )
-          with open("gradle.properties", "w", encoding="utf-8") as f:
-              f.write(gradle_props)
-          with open("app/gradle.properties", "w", encoding="utf-8") as f:
-              f.write(gradle_props)
 
-          settings_gradle = (
+
+          def escape_bare_ampersand(xml_str):
+              return re.sub(r'&(?!amp;|lt;|gt;|quot;|apos;|#\d+;|#x[0-9a-fA-F]+;)', '&amp;', xml_str)
+
+
+          def fix_missing_id_prefix(xml_str):
+              def repl(match):
+                  val = match.group(1)
+                  if val.startswith('@+id/') or val.startswith('@id/') or val.startswith('@android:id/'):
+                      return match.group(0)
+                  clean = re.sub(r'[^A-Za-z0-9_]', '_', val)
+                  return 'android:id="@+id/{}"'.format(clean)
+              return re.sub(r'android:id\s*=\s*"([^"]*)"', repl, xml_str)
+
+
+          def sanitize_layout_xml(raw_xml):
+              if not raw_xml or not raw_xml.strip():
+                  return FALLBACK_LAYOUT
+              xml_str = raw_xml.strip().lstrip("\ufeff")
+              if not xml_str.startswith("<?xml"):
+                  xml_str = '<?xml version="1.0" encoding="utf-8"?>\n' + xml_str
+              xml_str = escape_bare_ampersand(xml_str)
+              xml_str = fix_missing_id_prefix(xml_str)
+              if "xmlns:android=" not in xml_str:
+                  xml_str = re.sub(
+                      r'(<[A-Za-z][\w\.]*)',
+                      r'\1 xmlns:android="http://schemas.android.com/apk/res/android"',
+                      xml_str,
+                      count=1,
+                  )
+              try:
+                  minidom.parseString(xml_str.encode("utf-8"))
+              except Exception:
+                  return FALLBACK_LAYOUT
+              return xml_str
+
+
+          def compute_brace_depth(code):
+              depth = 0
+              in_string = False
+              in_char = False
+              in_line_comment = False
+              in_block_comment = False
+              escape = False
+              i = 0
+              n = len(code)
+              while i < n:
+                  c = code[i]
+                  nxt = code[i + 1] if i + 1 < n else ""
+                  if in_line_comment:
+                      if c == "\n":
+                          in_line_comment = False
+                      i += 1
+                      continue
+                  if in_block_comment:
+                      if c == "*" and nxt == "/":
+                          i += 2
+                          in_block_comment = False
+                          continue
+                      i += 1
+                      continue
+                  if in_string:
+                      if escape:
+                          escape = False
+                      elif c == "\\":
+                          escape = True
+                      elif c == '"':
+                          in_string = False
+                      i += 1
+                      continue
+                  if in_char:
+                      if escape:
+                          escape = False
+                      elif c == "\\":
+                          escape = True
+                      elif c == "'":
+                          in_char = False
+                      i += 1
+                      continue
+                  if c == "/" and nxt == "/":
+                      in_line_comment = True
+                      i += 1
+                      continue
+                  if c == "/" and nxt == "*":
+                      in_block_comment = True
+                      i += 1
+                      continue
+                  if c == '"':
+                      in_string = True
+                      i += 1
+                      continue
+                  if c == "'":
+                      in_char = True
+                      i += 1
+                      continue
+                  if c == "{":
+                      depth += 1
+                  elif c == "}":
+                      depth -= 1
+                  i += 1
+              return depth
+
+
+          def fix_broken_java_strings(code):
+              out = []
+              in_string = False
+              in_char = False
+              in_line_comment = False
+              in_block_comment = False
+              escape = False
+              i = 0
+              n = len(code)
+              while i < n:
+                  c = code[i]
+                  nxt = code[i + 1] if i + 1 < n else ""
+                  if in_line_comment:
+                      out.append(c)
+                      if c == "\n":
+                          in_line_comment = False
+                      i += 1
+                      continue
+                  if in_block_comment:
+                      out.append(c)
+                      if c == "*" and nxt == "/":
+                          out.append(nxt)
+                          i += 2
+                          in_block_comment = False
+                          continue
+                      i += 1
+                      continue
+                  if in_string:
+                      if escape:
+                          out.append(c)
+                          escape = False
+                          i += 1
+                          continue
+                      if c == "\\":
+                          out.append(c)
+                          escape = True
+                          i += 1
+                          continue
+                      if c == '"':
+                          out.append(c)
+                          in_string = False
+                          i += 1
+                          continue
+                      if c == "\n":
+                          out.append('\\n" +\n"')
+                          i += 1
+                          continue
+                      out.append(c)
+                      i += 1
+                      continue
+                  if in_char:
+                      if escape:
+                          out.append(c)
+                          escape = False
+                          i += 1
+                          continue
+                      if c == "\\":
+                          out.append(c)
+                          escape = True
+                          i += 1
+                          continue
+                      if c == "'":
+                          out.append(c)
+                          in_char = False
+                          i += 1
+                          continue
+                      out.append(c)
+                      i += 1
+                      continue
+                  if c == "/" and nxt == "/":
+                      in_line_comment = True
+                      out.append(c)
+                      i += 1
+                      continue
+                  if c == "/" and nxt == "*":
+                      in_block_comment = True
+                      out.append(c)
+                      i += 1
+                      continue
+                  if c == '"':
+                      in_string = True
+                      out.append(c)
+                      i += 1
+                      continue
+                  if c == "'":
+                      in_char = True
+                      out.append(c)
+                      i += 1
+                      continue
+                  out.append(c)
+                  i += 1
+              if in_string:
+                  out.append('"')
+              return "".join(out)
+
+
+          FALLBACK_JAVA_TEMPLATE = (
+              "package {pkg};\n\n"
+              "import android.app.Activity;\n"
+              "import android.os.Bundle;\n\n"
+              "public class MainActivity extends Activity {{\n"
+              "    @Override\n"
+              "    protected void onCreate(Bundle savedInstanceState) {{\n"
+              "        super.onCreate(savedInstanceState);\n"
+              "        setContentView(R.layout.activity_main);\n"
+              "    }}\n"
+              "}}\n"
+          )
+
+
+          def sanitize_java(raw_java, package_name):
+              try:
+                  code = raw_java or ""
+                  code = code.replace("\r\n", "\n").replace("\r", "\n")
+                  code = code.lstrip("\ufeff").strip()
+                  if not code:
+                      raise ValueError("empty java source")
+
+                  if re.search(r'^\s*package\s+[\w.]+\s*;', code, re.MULTILINE):
+                      code = re.sub(
+                          r'^\s*package\s+[\w.]+\s*;',
+                          "package {};".format(package_name),
+                          code, count=1, flags=re.MULTILINE,
+                      )
+                  else:
+                      code = "package {};\n\n".format(package_name) + code
+
+                  code = re.sub(r'^\s*import\s+androidx\.[\w.]+;\s*$', '', code, flags=re.MULTILINE)
+                  code = code.replace("AppCompatActivity", "Activity")
+
+                  if not re.search(r'^\s*import\s+android\.app\.Activity\s*;', code, re.MULTILINE):
+                      code = re.sub(r'(package\s+[\w.]+\s*;\s*\n)', r'\1import android.app.Activity;\n', code, count=1)
+                  if not re.search(r'^\s*import\s+android\.os\.Bundle\s*;', code, re.MULTILINE):
+                      code = re.sub(r'(package\s+[\w.]+\s*;\s*\n)', r'\1import android.os.Bundle;\n', code, count=1)
+
+                  if not re.search(r'class\s+MainActivity\s+extends\s+\w+', code):
+                      code = re.sub(r'class\s+MainActivity\b', 'class MainActivity extends Activity', code, count=1)
+
+                  code = fix_broken_java_strings(code)
+
+                  depth = compute_brace_depth(code)
+                  if depth < 0:
+                      raise ValueError("negative brace depth")
+                  if depth > 0:
+                      code = code.rstrip() + ("\n" + "}" * depth) + "\n"
+
+                  if "class MainActivity" not in code:
+                      raise ValueError("MainActivity missing after sanitation")
+
+                  return code
+              except Exception:
+                  return FALLBACK_JAVA_TEMPLATE.format(pkg=package_name)
+
+
+          def build_manifest(package_name):
+              return (
+                  '<?xml version="1.0" encoding="utf-8"?>\n'
+                  '<manifest xmlns:android="http://schemas.android.com/apk/res/android"\n'
+                  '    package="{pkg}">\n\n'
+                  '    <application\n'
+                  '        android:allowBackup="true"\n'
+                  '        android:label="@string/app_name"\n'
+                  '        android:icon="@android:drawable/sym_def_app_icon"\n'
+                  '        android:theme="@android:style/Theme.DeviceDefault.NoActionBar"\n'
+                  '        android:supportsRtl="true">\n\n'
+                  '        <activity\n'
+                  '            android:name=".MainActivity"\n'
+                  '            android:exported="true">\n'
+                  '            <intent-filter>\n'
+                  '                <action android:name="android.intent.action.MAIN" />\n'
+                  '                <category android:name="android.intent.category.LAUNCHER" />\n'
+                  '            </intent-filter>\n'
+                  '        </activity>\n\n'
+                  '    </application>\n'
+                  '</manifest>\n'
+              ).format(pkg=package_name)
+
+
+          def build_strings_xml(app_label_escaped):
+              return (
+                  '<?xml version="1.0" encoding="utf-8"?>\n'
+                  '<resources>\n'
+                  '    <string name="app_name">{}</string>\n'
+                  '</resources>\n'
+              ).format(app_label_escaped)
+
+
+          ROOT_BUILD_GRADLE = (
+              "plugins {\n"
+              '    id("com.android.application") version "8.5.2" apply false\n'
+              "}\n"
+          )
+
+          SETTINGS_GRADLE = (
               "pluginManagement {\n"
               "    repositories {\n"
               "        google()\n"
@@ -79,289 +436,172 @@ jobs:
               "        mavenCentral()\n"
               "    }\n"
               "}\n"
-              "rootProject.name = 'DynamicAndroidApp'\n"
-              "include ':app'\n"
-          )
-          with open("settings.gradle", "w", encoding="utf-8") as f:
-              f.write(settings_gradle)
-
-          with open("build.gradle", "w", encoding="utf-8") as f:
-              f.write("plugins {\n    id 'com.android.application' version '8.2.2' apply false\n}\n")
-
-          app_build_gradle = (
-              "plugins {\n"
-              "    id 'com.android.application'\n"
-              "}\n\n"
-              "android {\n"
-              "    namespace 'com.stb.dynamicapp'\n"
-              "    compileSdk 34\n\n"
-              "    defaultConfig {\n"
-              "        applicationId 'com.stb.dynamicapp'\n"
-              "        minSdk 21\n"
-              "        targetSdk 34\n"
-              "        versionCode 1\n"
-              "        versionName '1.0'\n"
-              "    }\n\n"
-              "    buildTypes {\n"
-              "        release {\n"
-              "            minifyEnabled false\n"
-              "        }\n"
-              "    }\n"
-              "    compileOptions {\n"
-              "        sourceCompatibility JavaVersion.VERSION_17\n"
-              "        targetCompatibility JavaVersion.VERSION_17\n"
-              "    }\n"
-              "}\n\n"
-              "dependencies {\n"
-              "    implementation 'androidx.appcompat:appcompat:1.6.1'\n"
-              "    implementation 'com.google.android.material:material:1.11.0'\n"
-              "}\n"
-          )
-          with open("app/build.gradle", "w", encoding="utf-8") as f:
-              f.write(app_build_gradle)
-
-          # 3. Ekstraksi Payload Bot
-          raw_payload = os.environ.get("PAYLOAD_DATA", "{}")
-          data = json.loads(raw_payload)
-          title = data.get("app_name", "DynamicApp").strip()
-          clean_title = re.sub(r'[^a-zA-Z0-9 ]', '', title).strip()[:25] or "HomeGymTracker"
-
-          # 4. Tulis AndroidManifest.xml (Byte ke-0 wajib '<', tema native anti force-close)
-          manifest_lines = [
-              '',
-              '',
-              '    ',
-              '        ',
-              '            ',
-              '                ',
-              '                ',
-              '            ',
-              '        ',
-              '    ',
-              ''
-          ]
-          with open("app/src/main/AndroidManifest.xml", "w", encoding="utf-8") as f:
-              f.write("\n".join(manifest_lines) + "\n")
-
-          # 5. Tulis MainActivity.java (Sanitasi string literal & auto-import)
-          j_b64 = data.get("java_code_b64", "")
-          j_code = base64.b64decode(j_b64).decode("utf-8", "ignore") if j_b64 else ""
-
-          j_code = re.sub(r'"\s*\n\s*', '" + "', j_code)
-          j_code = re.sub(r'\\(\s*\n)', r'\\n\1', j_code)
-
-          auto_imports = (
-              "package com.stb.dynamicapp;\n\n"
-              "import android.app.Activity;\n"
-              "import android.content.Context;\n"
-              "import android.content.SharedPreferences;\n"
-              "import android.graphics.Canvas;\n"
-              "import android.graphics.Color;\n"
-              "import android.graphics.Paint;\n"
-              "import android.graphics.RectF;\n"
-              "import android.os.Bundle;\n"
-              "import android.view.View;\n"
-              "import android.view.ViewGroup;\n"
-              "import android.widget.*;\n"
-              "import android.content.Intent;\n"
-          )
-          if "package com.stb.dynamicapp;" in j_code:
-              j_code = j_code.replace("package com.stb.dynamicapp;", auto_imports.strip())
-          else:
-              j_code = auto_imports.strip() + "\n" + j_code
-
-          j_code = re.sub(r'public\s+class\s+MainActivity\s+extends\s+[A-Za-z0-9_]+', 'public class MainActivity extends Activity', j_code)
-
-          with open("app/src/main/java/com/stb/dynamicapp/MainActivity.java", "w", encoding="utf-8") as f:
-              f.write(j_code)
-
-          # 6. Tulis Layout XML (Sanitasi & Validasi Anti-Kosong)
-          fallback_xml = (
-              '\n'
-              '\n'
-              '    \n'
-              '        \n'
-              '        \n'
-              '        \n'
-              '        \n'
-              '        \n'
-              '        \n'
-              '    \n'
-              ''
+              'rootProject.name = "GeneratedApp"\n'
+              'include(":app")\n'
           )
 
-          x_b64 = data.get("xml_code_b64", "")
-          x_code = base64.b64decode(x_b64).decode("utf-8", "ignore").strip() if x_b64 else ""
+          GRADLE_PROPERTIES = (
+              "org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8\n"
+              "org.gradle.parallel=true\n"
+              "android.useAndroidX=true\n"
+              "android.enableJetifier=false\n"
+          )
 
-          if x_code.startswith("\ufeff"):
-              x_code = x_code[1:]
 
-          x_code = re.sub(r'&(?!(amp|lt|gt|quot|apos);)', '&', x_code)
-          x_code = re.sub(r'android:id="(?!(?:@\+id/|@id/))([^"]+)"', r'android:id="@+id/\1"', x_code)
+          def build_app_gradle(package_name):
+              template = (
+                  "plugins {{\n"
+                  '    id("com.android.application")\n'
+                  "}}\n\n"
+                  "android {{\n"
+                  "    namespace \"{pkg}\"\n"
+                  "    compileSdk 34\n\n"
+                  "    defaultConfig {{\n"
+                  "        applicationId \"{pkg}\"\n"
+                  "        minSdk 21\n"
+                  "        targetSdk 34\n"
+                  "        versionCode 1\n"
+                  "        versionName \"1.0\"\n"
+                  "    }}\n\n"
+                  "    compileOptions {{\n"
+                  "        sourceCompatibility JavaVersion.VERSION_17\n"
+                  "        targetCompatibility JavaVersion.VERSION_17\n"
+                  "    }}\n\n"
+                  "    buildTypes {{\n"
+                  "        debug {{\n"
+                  "            minifyEnabled false\n"
+                  "        }}\n"
+                  "    }}\n"
+                  "}}\n"
+              )
+              return template.format(pkg=package_name)
 
-          is_valid = False
-          if len(x_code) >= 50 and any(kw in x_code for kw in ["Layout", "ScrollView"]):
-              try:
-                  ET.fromstring(x_code)
-                  is_valid = True
-              except Exception:
-                  is_valid = False
 
-          final_xml = x_code if is_valid else fallback_xml
-          xml_path = "app/src/main/res/layout/activity_main.xml"
-          with open(xml_path, "w", encoding="utf-8") as f:
-              f.write(final_xml.lstrip() + "\n")
+          def main():
+              app_name = b64d(os.environ.get("APP_NAME_B64", "")).strip() or "AI App"
+              package_name = sanitize_package_name(os.environ.get("PACKAGE_NAME_RAW", ""), app_name)
+              raw_xml = b64d(os.environ.get("ACTIVITY_XML_B64", ""))
+              raw_java = b64d(os.environ.get("MAIN_JAVA_B64", ""))
 
-          # 7. Generate Ikon Tematik HD
-          title_lower = title.lower()
-          gym_keys = ["gym", "workout", "fitness", "dumbel", "dumbbell", "katrol", "pulley", "otot"]
-          calc_keys = ["kalkulator", "hitung", "math", "kasir"]
-          game_keys = ["game", "ketuk", "tap", "skor", "play", "main"]
+              layout_xml = sanitize_layout_xml(raw_xml)
+              java_code = sanitize_java(raw_java, package_name)
+              app_label = esc_text(app_name)
 
-          if any(k in title_lower for k in gym_keys):
-              bg_color, inner_bg, icon_type = (216, 67, 21), (230, 81, 0), "gym"
-          elif any(k in title_lower for k in calc_keys):
-              bg_color, inner_bg, icon_type = (25, 118, 210), (33, 150, 243), "calc"
-          elif any(k in title_lower for k in game_keys):
-              bg_color, inner_bg, icon_type = (123, 31, 162), (156, 39, 176), "game"
-          else:
-              bg_color, inner_bg, icon_type = (48, 63, 159), (63, 81, 181), "star"
+              project_root = os.path.join(os.getcwd(), "project")
+              java_dir = os.path.join(project_root, "app", "src", "main", "java", *package_name.split("."))
+              res_layout_dir = os.path.join(project_root, "app", "src", "main", "res", "layout")
+              res_values_dir = os.path.join(project_root, "app", "src", "main", "res", "values")
+              manifest_dir = os.path.join(project_root, "app", "src", "main")
 
-          img = Image.new("RGBA", (512, 512), (0, 0, 0, 0))
-          draw = ImageDraw.Draw(img)
-          draw.rounded_rectangle([24, 24, 488, 488], radius=115, fill=bg_color)
-          draw.ellipse([64, 64, 448, 448], fill=inner_bg)
-          white = (255, 255, 255, 255)
+              for d in (java_dir, res_layout_dir, res_values_dir, manifest_dir):
+                  os.makedirs(d, exist_ok=True)
 
-          if icon_type == "gym":
-              draw.rounded_rectangle([190, 244, 322, 268], radius=8, fill=white)
-              draw.rounded_rectangle([140, 180, 190, 332], radius=14, fill=white)
-              draw.rounded_rectangle([110, 205, 140, 307], radius=10, fill=white)
-              draw.rounded_rectangle([322, 180, 372, 332], radius=14, fill=white)
-              draw.rounded_rectangle([372, 205, 402, 307], radius=10, fill=white)
-          elif icon_type == "calc":
-              draw.rounded_rectangle([130, 110, 382, 402], radius=28, fill=(255, 255, 255, 230))
-              draw.rounded_rectangle([155, 135, 357, 195], radius=12, fill=bg_color)
-              for y in [220, 280, 340]:
-                  for x in [160, 230]:
-                      draw.rounded_rectangle([x, y, x + 52, y + 42], radius=10, fill=inner_bg)
-              draw.rounded_rectangle([300, 220, 352, 262], radius=10, fill=inner_bg)
-              draw.rounded_rectangle([300, 280, 352, 382], radius=10, fill=(255, 87, 34, 255))
-          elif icon_type == "game":
-              draw.rounded_rectangle([100, 190, 412, 325], radius=60, fill=white)
-              draw.ellipse([100, 250, 190, 380], fill=white)
-              draw.ellipse([322, 250, 412, 380], fill=white)
-              draw.rounded_rectangle([165, 220, 185, 290], radius=4, fill=bg_color)
-              draw.rounded_rectangle([150, 235, 200, 275], radius=4, fill=bg_color)
-              draw.ellipse([335, 225, 355, 245], fill=(244, 67, 54, 255))
-              draw.ellipse([335, 265, 355, 285], fill=(76, 175, 80, 255))
-          else:
-              pts = []
-              for i in range(10):
-                  ang = i * math.pi / 5 - math.pi / 2
-                  r = 145 if i % 2 == 0 else 70
-                  pts.append((256 + r * math.cos(ang), 256 + r * math.sin(ang)))
-              draw.polygon(pts, fill=white)
-              draw.ellipse([230, 230, 282, 282], fill=bg_color)
+              def write(path, content):
+                  with open(path, "w", encoding="utf-8", newline="\n") as f:
+                      f.write(content)
 
-          icon_final = img.resize((192, 192), Image.LANCZOS)
-          icon_final.save("app/src/main/res/drawable/ic_launcher.png", "PNG")
-          icon_final.save("app/src/main/res/mipmap/ic_launcher.png", "PNG")
-          print("Setup file, XML, dan Ikon berhasil dibuat.")
+              write(os.path.join(project_root, "settings.gradle"), SETTINGS_GRADLE)
+              write(os.path.join(project_root, "build.gradle"), ROOT_BUILD_GRADLE)
+              write(os.path.join(project_root, "gradle.properties"), GRADLE_PROPERTIES)
 
-      - name: Setup Gradle Wrapper and Build APK
+              android_home = os.environ.get("ANDROID_HOME", "")
+              write(
+                  os.path.join(project_root, "local.properties"),
+                  "sdk.dir={}\n".format(android_home.replace("\\", "\\\\")),
+              )
+
+              write(os.path.join(project_root, "app", "build.gradle"), build_app_gradle(package_name))
+              write(os.path.join(manifest_dir, "AndroidManifest.xml"), build_manifest(package_name))
+              write(os.path.join(res_layout_dir, "activity_main.xml"), layout_xml)
+              write(os.path.join(res_values_dir, "strings.xml"), build_strings_xml(app_label))
+              write(os.path.join(java_dir, "MainActivity.java"), java_code)
+
+              print("Project generated. package={} app_name={}".format(package_name, app_name))
+
+
+          main()
+
+      - name: Build Debug APK
+        id: build
         run: |
-          gradle wrapper --gradle-version 8.5
-          chmod +x gradlew
-          set -o pipefail
-          ./gradlew assembleDebug -Pandroid.useAndroidX=true -Pandroid.enableJetifier=true --stacktrace 2>&1 | tee build_output.log
+          set +e
+          cd project
+          gradle --no-daemon --console=plain --stacktrace assembleDebug > "$GITHUB_WORKSPACE/build_log.txt" 2>&1
+          code=$?
+          set -e
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
 
       - name: Send APK to Telegram
-        if: success()
+        if: steps.build.outputs.exit_code == '0'
+        env:
+          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ github.event.client_payload.chat_id }}
+        run: |
+          APK_PATH=$(find project -name "*.apk" | head -n 1)
+          if [ -z "$APK_PATH" ]; then
+            curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+              -d chat_id="${CHAT_ID}" \
+              -d text="Build selesai tanpa error tetapi file APK tidak ditemukan." > /dev/null
+            exit 0
+          fi
+          curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" \
+            -F chat_id="${CHAT_ID}" \
+            -F document=@"${APK_PATH}" \
+            -F caption="Build APK berhasil" > /dev/null
+
+      # ---------------------------------------------------------------
+      # Sama seperti step generate: dijalankan sebagai file Python
+      # murni, bukan lewat bash, sehingga isi log build (yang bisa
+      # mengandung tanda kutip, backtick, dsb.) tidak pernah dirakit
+      # jadi perintah shell yang rawan pecah.
+      # ---------------------------------------------------------------
+      - name: Extract & Send Error Log
+        if: steps.build.outputs.exit_code != '0'
         shell: python
         env:
+          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHAT_ID: ${{ github.event.client_payload.chat_id }}
-          BOT_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          APP_TITLE: ${{ github.event.client_payload.app_name }}
         run: |
           import os
-          import glob
           import re
-          import requests
+          import urllib.request
+          import urllib.parse
 
-          token = os.environ.get("BOT_TOKEN", "").strip()
-          chat_id = os.environ.get("CHAT_ID", "").strip()
-          title = os.environ.get("APP_TITLE", "Aplikasi").strip()
+          BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
+          CHAT_ID = os.environ.get("CHAT_ID", "")
 
-          if not token:
-              print("ERROR: Secret TELEGRAM_TOKEN belum disetel!")
-              exit(1)
+          try:
+              with open("build_log.txt", "r", encoding="utf-8", errors="replace") as f:
+                  log_text = f.read()
+          except FileNotFoundError:
+              log_text = "Build log tidak ditemukan (kemungkinan gagal sebelum tahap compile)."
 
-          apk_files = glob.glob("app/build/outputs/apk/debug/*.apk")
-          if not apk_files:
-              print("ERROR: File APK tidak ditemukan di folder output!")
-              exit(1)
+          lines = log_text.splitlines()
+          error_lines = [ln for ln in lines if re.search(r'error[: ]|FAILED|Exception', ln, re.IGNORECASE)]
+          selected = error_lines[-40:] if error_lines else lines[-40:]
+          summary = "\n".join(selected).strip() or "Tidak ada detail error yang bisa diringkas."
 
-          original_apk = apk_files[0]
-          safe_name = re.sub(r'[^a-zA-Z0-9_-]', '_', title).strip('_') or "DynamicApp"
-          new_file_name = f"{safe_name}.apk"
-          new_apk_path = os.path.join(os.path.dirname(original_apk), new_file_name)
+          if len(summary) > 3500:
+              summary = summary[-3500:]
 
-          if original_apk != new_apk_path:
-              os.rename(original_apk, new_apk_path)
+          message = "Build APK GAGAL.\n\nRingkasan error dari log Gradle:\n\n" + summary
 
-          url = f"https://api.telegram.org/bot{token}/sendDocument"
-          payload = {
-              "chat_id": chat_id,
-              "caption": f"✅ *{title}* berhasil dikompilasi!\n📁 File: `{new_file_name}`\n🎨 Tema stabil & bebas force-close.",
-              "parse_mode": "Markdown"
-          }
+          if BOT_TOKEN and CHAT_ID:
+              url = "https://api.telegram.org/bot{}/sendMessage".format(BOT_TOKEN)
+              data = urllib.parse.urlencode({"chat_id": CHAT_ID, "text": message}).encode("utf-8")
+              req = urllib.request.Request(url, data=data, method="POST")
+              try:
+                  with urllib.request.urlopen(req, timeout=15) as resp:
+                      resp.read()
+              except Exception as exc:
+                  print("Gagal mengirim pesan Telegram:", exc)
+          else:
+              print("BOT_TOKEN atau CHAT_ID kosong, pesan tidak dikirim.")
 
-          with open(new_apk_path, "rb") as f:
-              files = {"document": (new_file_name, f, "application/vnd.android.package-archive")}
-              r = requests.post(url, data=payload, files=files, timeout=90)
-
-          if not r.json().get("ok"):
-              print(f"Telegram menolak pengiriman: {r.text}")
-              exit(1)
-
-          print(f"✅ APK {new_file_name} berhasil dikirim ke Telegram!")
-
-      - name: Notify Failure to Telegram with Extracted Error
-        if: failure()
-        shell: python
-        env:
-          CHAT_ID: ${{ github.event.client_payload.chat_id }}
-          BOT_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-        run: |
-          import os
-          import requests
-
-          token = os.environ.get("BOT_TOKEN", "").strip()
-          chat_id = os.environ.get("CHAT_ID", "").strip()
-
-          if not token or not chat_id:
-              exit(0)
-
-          error_lines = []
-          if os.path.exists("build_output.log"):
-              with open("build_output.log", "r", encoding="utf-8", errors="ignore") as f:
-                  lines = f.readlines()
-
-              for idx, line in enumerate(lines):
-                  line_lower = line.lower()
-                  if "error:" in line_lower or "failed" in line_lower or "exception:" in line_lower:
-                      start = max(0, idx - 1)
-                      end = min(len(lines), idx + 4)
-                      for l in lines[start:end]:
-                          if l.strip() and l not in error_lines and "org.gradle." not in l:
-                              error_lines.append(l.strip())
-
-          error_snippet = "\n".join(error_lines[:15]) if error_lines else "Cek log tab GitHub Actions untuk detail."
-
-          msg = f"❌ *Kompilasi APK Gagal!*\n\n*Detail Error:*\n```\n{error_snippet[:3500]}\n```"
-          requests.post(f"https://api.telegram.org/bot{token}/sendMessage", data={
-              "chat_id": chat_id,
-              "text": msg,
-              "parse_mode": "Markdown"
-          })
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build_log.txt
+          if-no-files-found: ignore
