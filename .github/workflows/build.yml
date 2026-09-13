@@ -99,28 +99,12 @@ jobs:
           }
           EOF
 
-          # 5. AndroidManifest.xml (Tema native anti-crash)
-          cat << 'EOF' > app/src/main/AndroidManifest.xml
-          
-          
-              
-                  
-                      
-                          
-                          
-                      
-                  
-              
-          
-          EOF
-
-      - name: Inject Code and Sanitize via Isolated Script
+      - name: Inject Code, Generate Manifest, and Sanitize
         env:
           PAYLOAD_DATA: ${{ toJson(github.event.client_payload) }}
         run: |
           pip install pillow --quiet
 
-          # Tulis runner python terisolasi tanpa heredoc konflik
           cat << 'RUNNER' > process_app.py
           import os
           import json
@@ -138,7 +122,27 @@ jobs:
           data = json.loads(raw)
           title = data.get("app_name", "DynamicApp").strip()
 
-          # --- 1. TULIS JAVA & CEGAH ERROR ESCAPE ---
+          clean_title = re.sub(r'[^a-zA-Z0-9 ]', '', title).strip()
+          clean_title = clean_title[:25] if clean_title else "HomeGymTracker"
+
+          # --- 1. GENERATE ANDROIDMANIFEST.XML (KOLOM 1 BARIS 1, BEBAS SPASI AWAL) ---
+          manifest_lines = [
+              '',
+              '',
+              '    ',
+              '        ',
+              '            ',
+              '                ',
+              '                ',
+              '            ',
+              '        ',
+              '    ',
+              ''
+          ]
+          with open("app/src/main/AndroidManifest.xml", "w", encoding="utf-8") as mf:
+              mf.write("\n".join(manifest_lines) + "\n")
+
+          # --- 2. TULIS JAVA DENGAN AUTO-IMPORT DAN ANTI-CRASH ---
           j_b64 = data.get("java_code_b64", "")
           j_code = base64.b64decode(j_b64).decode("utf-8", "ignore")
 
@@ -170,7 +174,7 @@ jobs:
           with open("app/src/main/java/com/stb/dynamicapp/MainActivity.java", "w", encoding="utf-8") as f:
               f.write(j_code)
 
-          # --- 2. TULIS XML ANTI-KOSONG & AUTO-FIX ID ---
+          # --- 3. TULIS XML ANTI-KOSONG DENGAN AUTO-FIX ID ---
           robust_default_xml = """
           
               
@@ -198,7 +202,6 @@ jobs:
           x_code = re.sub(r'android:id="(?!(?:@\+id/|@id/))([^"]+)"', r'android:id="@+id/\1"', x_code)
 
           is_valid = False
-          # Verifikasi tanpa operator tanda kurung siku ganda
           if len(x_code) >= 50:
               has_layout = False
               for kw in ["Layout", "ScrollView"]:
@@ -217,7 +220,7 @@ jobs:
           with open(target_xml, "w", encoding="utf-8") as f:
               f.write(final_xml.strip() + "\n")
 
-          # --- 3. GENERATE IKON TEMATIK HD ---
+          # --- 4. GENERATE IKON TEMATIK HD ---
           title_lower = title.lower()
           gym_keys = ["gym", "workout", "fitness", "dumbel", "dumbbell", "katrol", "pulley", "otot"]
           calc_keys = ["kalkulator", "hitung", "math", "kasir"]
@@ -276,7 +279,7 @@ jobs:
           else:
               pts = []
               for i in range(10):
-                  ang = i * math.pi / 5 - math.pi / 2
+                  ang = i * 3.14159 / 5 - 3.14159 / 2
                   r = 145 if i % 2 == 0 else 70
                   pts.append((256 + r * math.cos(ang), 256 + r * math.sin(ang)))
               draw.polygon(pts, fill=white)
@@ -285,21 +288,8 @@ jobs:
           icon_final = img.resize((192, 192), Image.LANCZOS)
           icon_final.save("app/src/main/res/drawable/ic_launcher.png", "PNG")
           icon_final.save("app/src/main/res/mipmap/ic_launcher.png", "PNG")
-
-          # --- 4. SINKRONISASI MANIFEST ---
-          clean_title = re.sub(r'[^a-zA-Z0-9 ]', '', title).strip()
-          clean_title = clean_title[:25] if clean_title else "HomeGymTracker"
-
-          manifest_file = "app/src/main/AndroidManifest.xml"
-          if os.path.exists(manifest_file):
-              with open(manifest_file, "r", encoding="utf-8") as mf:
-                  m_text = mf.read()
-              m_text = m_text.replace('android:label="DynamicApp"', f'android:label="{clean_title}"')
-              with open(manifest_file, "w", encoding="utf-8") as mf:
-                  mf.write(m_text)
           RUNNER
 
-          # Jalankan skrip terpisah
           python3 process_app.py
 
       - name: Setup Gradle Wrapper and Build APK
