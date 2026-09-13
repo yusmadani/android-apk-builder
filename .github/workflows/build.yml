@@ -99,7 +99,7 @@ jobs:
           }
           EOF
 
-          # 5. AndroidManifest.xml (Tema native agar tidak force close)
+          # 5. AndroidManifest.xml (Tema native anti-crash)
           cat << 'EOF' > app/src/main/AndroidManifest.xml
           
           
@@ -114,13 +114,20 @@ jobs:
           
           EOF
 
-      - name: Inject Code, Generate Icon, and Sanitize
+      - name: Inject Code and Sanitize via Isolated Script
         env:
           PAYLOAD_DATA: ${{ toJson(github.event.client_payload) }}
         run: |
           pip install pillow --quiet
-          python3 - << 'PYEOF'
-          import os, json, base64, shutil, re, math
+
+          # Tulis runner python terisolasi tanpa heredoc konflik
+          cat << 'RUNNER' > process_app.py
+          import os
+          import json
+          import base64
+          import shutil
+          import re
+          import math
           import xml.etree.ElementTree as ET
           from PIL import Image, ImageDraw
 
@@ -131,7 +138,7 @@ jobs:
           data = json.loads(raw)
           title = data.get("app_name", "DynamicApp").strip()
 
-          # 1. Tulis Java
+          # --- 1. TULIS JAVA & CEGAH ERROR ESCAPE ---
           j_b64 = data.get("java_code_b64", "")
           j_code = base64.b64decode(j_b64).decode("utf-8", "ignore")
 
@@ -163,7 +170,7 @@ jobs:
           with open("app/src/main/java/com/stb/dynamicapp/MainActivity.java", "w", encoding="utf-8") as f:
               f.write(j_code)
 
-          # 2. Tulis XML
+          # --- 2. TULIS XML ANTI-KOSONG & AUTO-FIX ID ---
           robust_default_xml = """
           
               
@@ -181,7 +188,7 @@ jobs:
           try:
               if x_b64:
                   x_code = base64.b64decode(x_b64).decode("utf-8", "ignore").strip()
-          except Exception as e:
+          except Exception:
               pass
 
           if x_code.startswith("\ufeff"):
@@ -191,7 +198,116 @@ jobs:
           x_code = re.sub(r'android:id="(?!(?:@\+id/|@id/))([^"]+)"', r'android:id="@+id/\1"', x_code)
 
           is_valid = False
-          if len(x_code) >= 50 and any(tag in x_code for tag in ["&1 | tee build_output.log
+          # Verifikasi tanpa operator tanda kurung siku ganda
+          if len(x_code) >= 50:
+              has_layout = False
+              for kw in ["Layout", "ScrollView"]:
+                  if kw in x_code:
+                      has_layout = True
+                      break
+              if has_layout:
+                  try:
+                      ET.fromstring(x_code)
+                      is_valid = True
+                  except Exception:
+                      is_valid = False
+
+          final_xml = x_code if is_valid else robust_default_xml
+          target_xml = "app/src/main/res/layout/activity_main.xml"
+          with open(target_xml, "w", encoding="utf-8") as f:
+              f.write(final_xml.strip() + "\n")
+
+          # --- 3. GENERATE IKON TEMATIK HD ---
+          title_lower = title.lower()
+          gym_keys = ["gym", "workout", "fitness", "dumbel", "dumbbell", "katrol", "pulley", "otot"]
+          calc_keys = ["kalkulator", "hitung", "math", "kasir"]
+          game_keys = ["game", "ketuk", "tap", "skor", "play", "main"]
+          notes_keys = ["catatan", "note", "memo", "todo", "tugas", "list"]
+
+          if any(k in title_lower for k in gym_keys):
+              bg_color, inner_bg, icon_type = (216, 67, 21), (230, 81, 0), "gym"
+          elif any(k in title_lower for k in calc_keys):
+              bg_color, inner_bg, icon_type = (25, 118, 210), (33, 150, 243), "calc"
+          elif any(k in title_lower for k in game_keys):
+              bg_color, inner_bg, icon_type = (123, 31, 162), (156, 39, 176), "game"
+          elif any(k in title_lower for k in notes_keys):
+              bg_color, inner_bg, icon_type = (245, 124, 0), (255, 152, 0), "notes"
+          else:
+              bg_color, inner_bg, icon_type = (48, 63, 159), (63, 81, 181), "star"
+
+          img = Image.new("RGBA", (512, 512), (0, 0, 0, 0))
+          draw = ImageDraw.Draw(img)
+          draw.rounded_rectangle([24, 24, 488, 488], radius=115, fill=bg_color)
+          draw.ellipse([64, 64, 448, 448], fill=inner_bg)
+          white = (255, 255, 255, 255)
+
+          if icon_type == "gym":
+              draw.rounded_rectangle([190, 244, 322, 268], radius=8, fill=white)
+              draw.rounded_rectangle([140, 180, 190, 332], radius=14, fill=white)
+              draw.rounded_rectangle([110, 205, 140, 307], radius=10, fill=white)
+              draw.rounded_rectangle([322, 180, 372, 332], radius=14, fill=white)
+              draw.rounded_rectangle([372, 205, 402, 307], radius=10, fill=white)
+          elif icon_type == "calc":
+              draw.rounded_rectangle([130, 110, 382, 402], radius=28, fill=(255, 255, 255, 230))
+              draw.rounded_rectangle([155, 135, 357, 195], radius=12, fill=bg_color)
+              for y in [220, 280, 340]:
+                  for x in [160, 230]:
+                      draw.rounded_rectangle([x, y, x + 52, y + 42], radius=10, fill=inner_bg)
+              draw.rounded_rectangle([300, 220, 352, 262], radius=10, fill=inner_bg)
+              draw.rounded_rectangle([300, 280, 352, 382], radius=10, fill=(255, 87, 34, 255))
+          elif icon_type == "game":
+              draw.rounded_rectangle([100, 190, 412, 325], radius=60, fill=white)
+              draw.ellipse([100, 250, 190, 380], fill=white)
+              draw.ellipse([322, 250, 412, 380], fill=white)
+              draw.rounded_rectangle([165, 220, 185, 290], radius=4, fill=bg_color)
+              draw.rounded_rectangle([150, 235, 200, 275], radius=4, fill=bg_color)
+              draw.ellipse([335, 225, 355, 245], fill=(244, 67, 54, 255))
+              draw.ellipse([335, 265, 355, 285], fill=(76, 175, 80, 255))
+              draw.ellipse([315, 245, 335, 265], fill=(33, 150, 243, 255))
+              draw.ellipse([355, 245, 375, 265], fill=(255, 193, 7, 255))
+          elif icon_type == "notes":
+              draw.rounded_rectangle([145, 110, 367, 402], radius=24, fill=white)
+              draw.rounded_rectangle([145, 110, 367, 165], radius=16, fill=(211, 47, 47, 255))
+              for bx in [190, 256, 322]:
+                  draw.ellipse([bx - 10, 125, bx + 10, 145], fill=white)
+              for gy in [210, 260, 310, 360]:
+                  draw.rounded_rectangle([175, gy, 195, gy + 20], radius=5, fill=inner_bg)
+                  draw.rounded_rectangle([215, gy + 3, 335, gy + 17], radius=6, fill=(189, 189, 189, 255))
+          else:
+              pts = []
+              for i in range(10):
+                  ang = i * math.pi / 5 - math.pi / 2
+                  r = 145 if i % 2 == 0 else 70
+                  pts.append((256 + r * math.cos(ang), 256 + r * math.sin(ang)))
+              draw.polygon(pts, fill=white)
+              draw.ellipse([230, 230, 282, 282], fill=bg_color)
+
+          icon_final = img.resize((192, 192), Image.LANCZOS)
+          icon_final.save("app/src/main/res/drawable/ic_launcher.png", "PNG")
+          icon_final.save("app/src/main/res/mipmap/ic_launcher.png", "PNG")
+
+          # --- 4. SINKRONISASI MANIFEST ---
+          clean_title = re.sub(r'[^a-zA-Z0-9 ]', '', title).strip()
+          clean_title = clean_title[:25] if clean_title else "HomeGymTracker"
+
+          manifest_file = "app/src/main/AndroidManifest.xml"
+          if os.path.exists(manifest_file):
+              with open(manifest_file, "r", encoding="utf-8") as mf:
+                  m_text = mf.read()
+              m_text = m_text.replace('android:label="DynamicApp"', f'android:label="{clean_title}"')
+              with open(manifest_file, "w", encoding="utf-8") as mf:
+                  mf.write(m_text)
+          RUNNER
+
+          # Jalankan skrip terpisah
+          python3 process_app.py
+
+      - name: Setup Gradle Wrapper and Build APK
+        run: |
+          gradle wrapper --gradle-version 8.5
+          chmod +x gradlew
+          set -o pipefail
+          ./gradlew assembleDebug -Pandroid.useAndroidX=true -Pandroid.enableJetifier=true --stacktrace 2>&1 | tee build_output.log
 
       - name: Send APK to Telegram
         if: success()
@@ -200,8 +316,11 @@ jobs:
           BOT_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           APP_TITLE: ${{ github.event.client_payload.app_name }}
         run: |
-          python3 - << 'EOF'
-          import os, glob, re, requests
+          cat << 'SENDER' > send_apk.py
+          import os
+          import glob
+          import re
+          import requests
 
           token = os.environ.get("BOT_TOKEN", "").strip()
           chat_id = os.environ.get("CHAT_ID", "").strip()
@@ -227,7 +346,7 @@ jobs:
           url = f"https://api.telegram.org/bot{token}/sendDocument"
           payload = {
               "chat_id": chat_id,
-              "caption": f"✅ *{title}* berhasil dikompilasi!\n📁 File: `{new_file_name}`\n🎨 Ikon & tema telah disesuaikan.",
+              "caption": f"✅ *{title}* berhasil dikompilasi!\n📁 File: `{new_file_name}`\n🎨 Bebas force-close & tema disesuaikan.",
               "parse_mode": "Markdown"
           }
 
@@ -240,7 +359,8 @@ jobs:
               exit(1)
 
           print(f"✅ APK {new_file_name} berhasil dikirim ke Telegram!")
-          EOF
+          SENDER
+          python3 send_apk.py
 
       - name: Notify Failure to Telegram with Extracted Error
         if: failure()
@@ -248,8 +368,9 @@ jobs:
           CHAT_ID: ${{ github.event.client_payload.chat_id }}
           BOT_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
         run: |
-          python3 - << 'EOF'
-          import os, requests
+          cat << 'NOTIFIER' > notify_fail.py
+          import os
+          import requests
 
           token = os.environ.get("BOT_TOKEN", "").strip()
           chat_id = os.environ.get("CHAT_ID", "").strip()
@@ -278,4 +399,5 @@ jobs:
               "text": msg,
               "parse_mode": "Markdown"
           })
-          EOF
+          NOTIFIER
+          python3 notify_fail.py
