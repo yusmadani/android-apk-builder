@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 Generate Android native project (Java + XML) dari payload.json.
-Bulletproof: Root direktori utama, package sinkron, auto-fix XML,
-auto-escape Java literal, strings & colors resource valid murni.
+Kebal Stripping: Dibuat tanpa karakter '<' dan '>' mentah agar
+tidak dapat dipotong oleh clipboard atau parser HTML browser.
 """
 import json
 import os
@@ -14,6 +14,9 @@ import xml.etree.ElementTree as ET
 ROOT = pathlib.Path(".")
 PAYLOAD = pathlib.Path("payload.json")
 PKG_NAME = "com.stb.dynamicapp"
+
+LT = chr(60)  # Simbol '<'
+GT = chr(62)  # Simbol '>'
 
 
 def die(msg, code=2):
@@ -32,16 +35,76 @@ def safe_get(d, key, default=None):
     return v
 
 
-# ---------- XML Helpers ----------
-FALLBACK_LAYOUT = """
+# Template XML aman tanpa karakter '<' dan '>' langsung
+FALLBACK_LAYOUT = (
+    LT + '?xml version="1.0" encoding="utf-8"?' + GT + '\n'
+    + LT + 'LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"\n'
+    + '    android:layout_width="match_parent"\n'
+    + '    android:layout_height="match_parent"\n'
+    + '    android:orientation="vertical"\n'
+    + '    android:gravity="center"\n'
+    + '    android:padding="24dp">\n\n'
+    + '    ' + LT + 'TextView\n'
+    + '        android:id="@+id/tvTitle"\n'
+    + '        android:layout_width="wrap_content"\n'
+    + '        android:layout_height="wrap_content"\n'
+    + '        android:text="@string/app_name"\n'
+    + '        android:textSize="22sp"\n'
+    + '        android:textStyle="bold" /' + GT + '\n\n'
+    + '    ' + LT + 'TextView\n'
+    + '        android:id="@+id/tvMessage"\n'
+    + '        android:layout_width="wrap_content"\n'
+    + '        android:layout_height="wrap_content"\n'
+    + '        android:layout_marginTop="12dp"\n'
+    + '        android:text="Aplikasi berhasil dibangun."\n'
+    + '        android:textSize="16sp" /' + GT + '\n\n'
+    + LT + '/LinearLayout' + GT + '\n'
+)
 
+MANIFEST_TEMPLATE = (
+    LT + '?xml version="1.0" encoding="utf-8"?' + GT + '\n'
+    + LT + 'manifest xmlns:android="http://schemas.android.com/apk/res/android">\n'
+    + '    ' + LT + 'application\n'
+    + '        android:allowBackup="true"\n'
+    + '        android:icon="@drawable/ic_launcher"\n'
+    + '        android:label="@string/app_name"\n'
+    + '        android:supportsRtl="true"\n'
+    + '        android:theme="@android:style/Theme.DeviceDefault.NoActionBar">\n'
+    + '        ' + LT + 'activity\n'
+    + '            android:name=".MainActivity"\n'
+    + '            android:exported="true">\n'
+    + '            ' + LT + 'intent-filter>\n'
+    + '                ' + LT + 'action android:name="android.intent.action.MAIN" /' + GT + '\n'
+    + '                ' + LT + 'category android:name="android.intent.category.LAUNCHER" /' + GT + '\n'
+    + '            ' + LT + '/intent-filter>\n'
+    + '        ' + LT + '/activity>\n'
+    + '    ' + LT + '/application>\n'
+    + LT + '/manifest' + GT + '\n'
+)
 
-    
+COLORS_XML = (
+    LT + '?xml version="1.0" encoding="utf-8"?' + GT + '\n'
+    + LT + 'resources' + GT + '\n'
+    + '    ' + LT + 'color name="black"' + GT + '#FF000000' + LT + '/color' + GT + '\n'
+    + '    ' + LT + 'color name="white"' + GT + '#FFFFFFFF' + LT + '/color' + GT + '\n'
+    + LT + '/resources' + GT + '\n'
+)
 
-    
-
-
-"""
+IC_LAUNCHER_XML = (
+    LT + '?xml version="1.0" encoding="utf-8"?' + GT + '\n'
+    + LT + 'vector xmlns:android="http://schemas.android.com/apk/res/android"\n'
+    + '    android:width="108dp"\n'
+    + '    android:height="108dp"\n'
+    + '    android:viewportWidth="108"\n'
+    + '    android:viewportHeight="108"' + GT + '\n'
+    + '    ' + LT + 'path\n'
+    + '        android:fillColor="#008577"\n'
+    + '        android:pathData="M0,0h108v108h-108z"/' + GT + '\n'
+    + '    ' + LT + 'path\n'
+    + '        android:fillColor="#FFFFFF"\n'
+    + '        android:pathData="M54,20L74,40H60V74H48V40H34L54,20Z"/' + GT + '\n'
+    + LT + '/vector' + GT + '\n'
+)
 
 
 def strip_code_fences(s):
@@ -88,7 +151,129 @@ def ensure_root_xml(xml):
     if not xml:
         return ""
     xml = xml.lstrip("\ufeff \t\r\n")
-    if not xml.startswith("]+>", "", raw_name)
+    header = LT + '?xml version="1.0" encoding="utf-8"?' + GT + '\n'
+    if not xml.startswith(LT + "?xml"):
+        xml = header + xml
+    return xml
+
+
+def validate_xml(xml):
+    try:
+        ET.fromstring(xml)
+        return True
+    except Exception as e:
+        print(f"[WARN] XML invalid: {e}", file=sys.stderr)
+        return False
+
+
+def sanitize_layout(raw_xml):
+    xml = strip_code_fences(raw_xml)
+    xml = ensure_root_xml(xml)
+    if not xml or len(xml.strip()) in range(0, 30):
+        print("[WARN] Layout kosong/terlalu pendek, memakai fallback.", file=sys.stderr)
+        return FALLBACK_LAYOUT
+    xml = fix_xml_escapes(xml)
+    xml = fix_missing_id_prefix(xml)
+    if not validate_xml(xml):
+        print("[WARN] Layout rusak, memakai fallback.", file=sys.stderr)
+        return FALLBACK_LAYOUT
+    return xml
+
+
+def sanitize_java_strings(java):
+    if not java:
+        return java
+    java = strip_code_fences(java)
+    java = java.replace("\r\n", "\n").replace("\r", "\n")
+    java = re.sub(r'"\s*\n\s*', '" + "', java)
+
+    out = []
+    in_str = False
+    i = 0
+    n = len(java)
+    while i != n:
+        c = java[i]
+        if in_str:
+            if c == '\\' and i + 1 != n:
+                out.append(c)
+                out.append(java[i + 1])
+                i += 2
+                continue
+            if c == '"':
+                in_str = False
+                out.append(c)
+                i += 1
+                continue
+            if c == '\n':
+                out.append('\\n')
+                i += 1
+                continue
+            out.append(c)
+            i += 1
+        else:
+            if c == '"':
+                in_str = True
+            out.append(c)
+            i += 1
+
+    return "".join(out)
+
+
+def sanitize_java(raw_java, pkg):
+    java = strip_code_fences(raw_java)
+    if not java or "class " not in java:
+        print("[WARN] Java kosong/tidak valid, memakai MainActivity fallback.", file=sys.stderr)
+        return (
+            f"package {pkg};\n\n"
+            "import android.app.Activity;\n"
+            "import android.os.Bundle;\n\n"
+            "public class MainActivity extends Activity {\n"
+            "    @Override\n"
+            "    protected void onCreate(Bundle savedInstanceState) {\n"
+            "        super.onCreate(savedInstanceState);\n"
+            "        setContentView(R.layout.activity_main);\n"
+            "    }\n"
+            "}\n"
+        )
+
+    java = sanitize_java_strings(java)
+
+    if re.search(r"package\s+[\w\.]+;", java):
+        java = re.sub(r"package\s+[\w\.]+;", f"package {pkg};", java)
+    else:
+        java = f"package {pkg};\n\n" + java
+
+    java = re.sub(r"extends\s+AppCompatActivity", "extends Activity", java)
+    java = re.sub(r"import\s+androidx\.appcompat\.app\.AppCompatActivity;", "", java)
+
+    essential_imports = [
+        "import android.app.Activity;",
+        "import android.os.Bundle;",
+        "import android.view.View;",
+        "import android.widget.*;",
+    ]
+    for imp in essential_imports:
+        if imp not in java:
+            java = re.sub(r"(package\s+[\w\.]+;\n*)", r"\1" + imp + "\n", java)
+
+    return java
+
+
+def write(path, content):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
+def main():
+    if not PAYLOAD.exists():
+        die("payload.json tidak ditemukan!")
+    try:
+        data = json.loads(PAYLOAD.read_text(encoding="utf-8"))
+    except Exception as e:
+        die(f"payload.json bukan format JSON valid: {e}")
+
+    raw_name = safe_get(data, "app_name", "DynamicApp")
+    clean_app_name = re.sub(LT + r"[^" + GT + r"]+" + GT, "", raw_name)
     clean_app_name = (
         clean_app_name.replace("&", "&")
         .replace("'", "\\'")
@@ -164,47 +349,18 @@ def ensure_root_xml(xml):
     ))
 
     # 3. AndroidManifest.xml
-    manifest_content = (
-        '\n'
-        '\n'
-        '    \n'
-        '        \n'
-        '            \n'
-        '                \n'
-        '                \n'
-        '            \n'
-        '        \n'
-        '    \n'
-        '\n'
-    )
-    write(ROOT / "app" / "src" / "main" / "AndroidManifest.xml", manifest_content)
+    write(ROOT / "app" / "src" / "main" / "AndroidManifest.xml", MANIFEST_TEMPLATE)
 
-    # 4. Resources (strings.xml HANYA berisi tag , colors.xml HANYA tag )
+    # 4. Resources
     strings_content = (
-        '\n'
-        '\n'
-        f'    {clean_app_name}\n'
-        '\n'
+        LT + '?xml version="1.0" encoding="utf-8"?' + GT + '\n'
+        + LT + 'resources' + GT + '\n'
+        + '    ' + LT + 'string name="app_name"' + GT + clean_app_name + LT + '/string' + GT + '\n'
+        + LT + '/resources' + GT + '\n'
     )
     write(ROOT / "app" / "src" / "main" / "res" / "values" / "strings.xml", strings_content)
-
-    colors_content = (
-        '\n'
-        '\n'
-        '    #FF000000\n'
-        '    #FFFFFFFF\n'
-        '\n'
-    )
-    write(ROOT / "app" / "src" / "main" / "res" / "values" / "colors.xml", colors_content)
-
-    icon_content = (
-        '\n'
-        '\n'
-        '    \n'
-        '    \n'
-        '\n'
-    )
-    write(ROOT / "app" / "src" / "main" / "res" / "drawable" / "ic_launcher.xml", icon_content)
+    write(ROOT / "app" / "src" / "main" / "res" / "values" / "colors.xml", COLORS_XML)
+    write(ROOT / "app" / "src" / "main" / "res" / "drawable" / "ic_launcher.xml", IC_LAUNCHER_XML)
     write(ROOT / "app" / "src" / "main" / "res" / "layout" / "activity_main.xml", layout_xml)
 
     # 5. Java Source File
