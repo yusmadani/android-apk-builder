@@ -99,7 +99,7 @@ jobs:
           }
           EOF
 
-          # 5. AndroidManifest.xml (Menggunakan DeviceDefault.NoActionBar agar tidak crash saat dibuka)
+          # 5. AndroidManifest.xml (Tema native agar tidak force close)
           cat << 'EOF' > app/src/main/AndroidManifest.xml
           
           
@@ -114,7 +114,7 @@ jobs:
           
           EOF
 
-      - name: Inject Dynamic App Code, Themed Icon & Sanitize via Python
+      - name: Inject Code, Generate Icon, and Sanitize
         env:
           PAYLOAD_DATA: ${{ toJson(github.event.client_payload) }}
         run: |
@@ -131,13 +131,10 @@ jobs:
           data = json.loads(raw)
           title = data.get("app_name", "DynamicApp").strip()
 
-          # ==========================================
-          # 1. TULIS JAVA, SUNTIKKAN IMPORT, & CEGAH CRASH
-          # ==========================================
+          # 1. Tulis Java
           j_b64 = data.get("java_code_b64", "")
           j_code = base64.b64decode(j_b64).decode("utf-8", "ignore")
 
-          # Perbaiki string literal yang terputus enter fisik
           j_code = re.sub(r'"\s*\n\s*', '" + "', j_code)
           j_code = re.sub(r'\\(\s*\n)', r'\\n\1', j_code)
 
@@ -161,15 +158,12 @@ jobs:
           else:
               j_code = auto_imports.strip() + "\n" + j_code
 
-          # Pastikan MainActivity selalu extends Activity biasa agar cocok dengan tema
           j_code = re.sub(r'public\s+class\s+MainActivity\s+extends\s+[A-Za-z0-9_]+', 'public class MainActivity extends Activity', j_code)
 
           with open("app/src/main/java/com/stb/dynamicapp/MainActivity.java", "w", encoding="utf-8") as f:
               f.write(j_code)
 
-          # ==========================================
-          # 2. SANITASI & VALIDASI LAYOUT XML (ANTI-KOSONG & AUTO-FIX ID)
-          # ==========================================
+          # 2. Tulis XML
           robust_default_xml = """
           
               
@@ -188,18 +182,16 @@ jobs:
               if x_b64:
                   x_code = base64.b64decode(x_b64).decode("utf-8", "ignore").strip()
           except Exception as e:
-              print(f"[WARN] Gagal decode base64 XML: {e}")
+              pass
 
           if x_code.startswith("\ufeff"):
               x_code = x_code[1:]
 
-          # Escape simbol & mentah
           x_code = re.sub(r'&(?!(amp|lt|gt|quot|apos);)', '&', x_code)
-          # Auto-fix ID yang lupa ditulis @+id/
           x_code = re.sub(r'android:id="(?!(?:@\+id/|@id/))([^"]+)"', r'android:id="@+id/\1"', x_code)
 
           is_valid = False
-          if len(x_code) >= 50 and ("&1 | tee build_output.log
+          if len(x_code) >= 50 and any(tag in x_code for tag in ["&1 | tee build_output.log
 
       - name: Send APK to Telegram
         if: success()
