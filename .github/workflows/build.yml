@@ -35,26 +35,25 @@ jobs:
       - name: Install Python Dependencies
         run: pip install pillow requests --quiet
 
-      # Buat payload.json (Mendukung pemicu dari Bot Telegram maupun Run Workflow manual)
+      # Buat payload.json
       - name: Create payload.json
         shell: python
         env:
           PAYLOAD_DATA: ${{ toJson(github.event.client_payload) }}
           MANUAL_APP_NAME: ${{ github.event.inputs.test_app_name }}
         run: |
-          import os
-          import json
+          import os, json
 
-          raw_payload = os.environ.get("PAYLOAD_DATA", "")
+          raw = os.environ.get("PAYLOAD_DATA", "")
           data = {}
           try:
-              if raw_payload and raw_payload != "null":
-                  data = json.loads(raw_payload)
+              if raw and raw != "null":
+                  data = json.loads(raw)
           except Exception:
               pass
 
           if not data:
-              manual_name = os.environ.get("MANUAL_APP_NAME", "TestApp")
+              manual_name = os.environ.get("MANUAL_APP_NAME", "DynamicApp")
               data = {
                   "app_name": manual_name,
                   "activity_main_xml": "",
@@ -63,9 +62,8 @@ jobs:
 
           with open("payload.json", "w", encoding="utf-8") as f:
               json.dump(data, f, ensure_ascii=False, indent=2)
-          print("payload.json berhasil dibuat.")
 
-      # Jalankan Generator Proyek (Mendukung lokasi file di root maupun di .github/workflows/)
+      # Eksekusi generator Python murni (menulis Manifest, Layout, Java, & Gradle)
       - name: Run Project Generator
         run: |
           if [ -f "generate_project.py" ]; then
@@ -77,13 +75,13 @@ jobs:
             exit 1
           fi
 
-      # Kompilasi Gradle di dalam folder project/
-      - name: Build APK with Gradle Wrapper
+      # Kompilasi Gradle langsung di direktori utama
+      - name: Build APK with Gradle
         run: |
-          cd project
+          gradle wrapper --gradle-version 8.7
           chmod +x gradlew
           set -o pipefail
-          ./gradlew assembleDebug -Pandroid.useAndroidX=true -Pandroid.nonTransitiveRClass=true --stacktrace 2>&1 | tee ../build_output.log
+          ./gradlew assembleDebug -Pandroid.useAndroidX=true -Pandroid.enableJetifier=true --stacktrace 2>&1 | tee build_output.log
 
       # Kirim file APK ke Telegram
       - name: Send APK to Telegram
@@ -94,22 +92,19 @@ jobs:
           BOT_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           APP_TITLE: ${{ github.event.client_payload.app_name || github.event.inputs.test_app_name }}
         run: |
-          import os
-          import glob
-          import re
-          import requests
+          import os, glob, re, requests
 
           token = os.environ.get("BOT_TOKEN", "").strip()
           chat_id = os.environ.get("CHAT_ID", "").strip()
           title = os.environ.get("APP_TITLE", "Aplikasi").strip() or "Aplikasi"
 
           if not token or not chat_id:
-              print("Build selesai. Pengiriman Telegram dilewati (pengujian manual / token kosong).")
+              print("Pengiriman Telegram dilewati (uji coba web / token tidak disetel).")
               exit(0)
 
-          apk_files = glob.glob("project/app/build/outputs/apk/debug/*.apk")
+          apk_files = glob.glob("app/build/outputs/apk/debug/*.apk")
           if not apk_files:
-              print("ERROR: File APK tidak ditemukan di project/app/build/outputs/apk/debug/!")
+              print("ERROR: File APK tidak ditemukan di app/build/outputs/apk/debug/!")
               exit(1)
 
           original_apk = apk_files[0]
@@ -123,7 +118,7 @@ jobs:
           url = f"https://api.telegram.org/bot{token}/sendDocument"
           payload = {
               "chat_id": chat_id,
-              "caption": f"✅ *{title}* berhasil dibangun!\n📁 File: `{new_file_name}`\n🎨 Versi stabil bebas force-close.",
+              "caption": f"✅ *{title}* berhasil dikompilasi!\n📁 File: `{new_file_name}`\n🎨 Versi stabil bebas force-close.",
               "parse_mode": "Markdown"
           }
 
@@ -132,12 +127,12 @@ jobs:
               r = requests.post(url, data=payload, files=files, timeout=90)
 
           if not r.json().get("ok"):
-              print(f"Gagal mengirim dokumen ke Telegram: {r.text}")
+              print(f"Gagal mengirim ke Telegram: {r.text}")
               exit(1)
 
           print(f"✅ APK {new_file_name} berhasil dikirim ke Telegram!")
 
-      # Notifikasi kegagalan jika compile error
+      # Kirim notifikasi error jika gagal
       - name: Notify Failure to Telegram
         if: failure()
         shell: python
@@ -145,8 +140,7 @@ jobs:
           CHAT_ID: ${{ github.event.client_payload.chat_id }}
           BOT_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
         run: |
-          import os
-          import requests
+          import os, requests
 
           token = os.environ.get("BOT_TOKEN", "").strip()
           chat_id = os.environ.get("CHAT_ID", "").strip()
