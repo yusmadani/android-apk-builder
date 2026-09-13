@@ -21,91 +21,14 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Scaffold Android Project Structure
-        run: |
-          mkdir -p app/src/main/java/com/stb/dynamicapp
-          mkdir -p app/src/main/res/layout
-          mkdir -p app/src/main/res/drawable
-          mkdir -p app/src/main/res/mipmap
+      - name: Install Python Tooling
+        run: pip install pillow requests --quiet
 
-          # 1. gradle.properties
-          cat << 'EOF' > gradle.properties
-          android.useAndroidX=true
-          android.enableJetifier=true
-          android.nonTransitiveRClass=true
-          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
-          EOF
-          cp gradle.properties app/gradle.properties
-
-          # 2. settings.gradle
-          cat << 'EOF' > settings.gradle
-          pluginManagement {
-              repositories {
-                  google()
-                  mavenCentral()
-                  gradlePluginPortal()
-              }
-          }
-          dependencyResolutionManagement {
-              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-          }
-          rootProject.name = "DynamicAndroidApp"
-          include ':app'
-          EOF
-
-          # 3. build.gradle (Root)
-          cat << 'EOF' > build.gradle
-          plugins {
-              id 'com.android.application' version '8.2.2' apply false
-          }
-          EOF
-
-          # 4. app/build.gradle
-          cat << 'EOF' > app/build.gradle
-          plugins {
-              id 'com.android.application'
-          }
-
-          android {
-              namespace 'com.stb.dynamicapp'
-              compileSdk 34
-
-              defaultConfig {
-                  applicationId "com.stb.dynamicapp"
-                  minSdk 21
-                  targetSdk 34
-                  versionCode 1
-                  versionName "1.0"
-              }
-
-              buildTypes {
-                  release {
-                      minifyEnabled false
-                  }
-              }
-              compileOptions {
-                  sourceCompatibility JavaVersion.VERSION_17
-                  targetCompatibility JavaVersion.VERSION_17
-              }
-          }
-
-          dependencies {
-              implementation 'androidx.appcompat:appcompat:1.6.1'
-              implementation 'com.google.android.material:material:1.11.0'
-          }
-          EOF
-
-      - name: Inject Code, Generate Manifest, and Sanitize
+      - name: Scaffold Project and Inject Code (Pure Python Runner)
+        shell: python
         env:
           PAYLOAD_DATA: ${{ toJson(github.event.client_payload) }}
         run: |
-          pip install pillow --quiet
-
-          cat << 'RUNNER' > process_app.py
           import os
           import json
           import base64
@@ -115,55 +38,128 @@ jobs:
           import xml.etree.ElementTree as ET
           from PIL import Image, ImageDraw
 
+          # 1. Buat Direktori Proyek
+          os.makedirs("app/src/main/java/com/stb/dynamicapp", exist_ok=True)
+          os.makedirs("app/src/main/res/layout", exist_ok=True)
+          os.makedirs("app/src/main/res/drawable", exist_ok=True)
+          os.makedirs("app/src/main/res/mipmap", exist_ok=True)
+
           if os.path.exists("app/src/main/res/values"):
               shutil.rmtree("app/src/main/res/values")
 
-          raw = os.environ.get("PAYLOAD_DATA", "{}")
-          data = json.loads(raw)
+          # 2. Tulis File Konfigurasi Gradle
+          gradle_props = (
+              "android.useAndroidX=true\n"
+              "android.enableJetifier=true\n"
+              "android.nonTransitiveRClass=true\n"
+              "org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8\n"
+          )
+          with open("gradle.properties", "w", encoding="utf-8") as f:
+              f.write(gradle_props)
+          with open("app/gradle.properties", "w", encoding="utf-8") as f:
+              f.write(gradle_props)
+
+          settings_gradle = (
+              "pluginManagement {\n"
+              "    repositories {\n"
+              "        google()\n"
+              "        mavenCentral()\n"
+              "        gradlePluginPortal()\n"
+              "    }\n"
+              "}\n"
+              "dependencyResolutionManagement {\n"
+              "    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)\n"
+              "    repositories {\n"
+              "        google()\n"
+              "        mavenCentral()\n"
+              "    }\n"
+              "}\n"
+              "rootProject.name = 'DynamicAndroidApp'\n"
+              "include ':app'\n"
+          )
+          with open("settings.gradle", "w", encoding="utf-8") as f:
+              f.write(settings_gradle)
+
+          with open("build.gradle", "w", encoding="utf-8") as f:
+              f.write("plugins {\n    id 'com.android.application' version '8.2.2' apply false\n}\n")
+
+          app_build_gradle = (
+              "plugins {\n"
+              "    id 'com.android.application'\n"
+              "}\n\n"
+              "android {\n"
+              "    namespace 'com.stb.dynamicapp'\n"
+              "    compileSdk 34\n\n"
+              "    defaultConfig {\n"
+              "        applicationId 'com.stb.dynamicapp'\n"
+              "        minSdk 21\n"
+              "        targetSdk 34\n"
+              "        versionCode 1\n"
+              "        versionName '1.0'\n"
+              "    }\n\n"
+              "    buildTypes {\n"
+              "        release {\n"
+              "            minifyEnabled false\n"
+              "        }\n"
+              "    }\n"
+              "    compileOptions {\n"
+              "        sourceCompatibility JavaVersion.VERSION_17\n"
+              "        targetCompatibility JavaVersion.VERSION_17\n"
+              "    }\n"
+              "}\n\n"
+              "dependencies {\n"
+              "    implementation 'androidx.appcompat:appcompat:1.6.1'\n"
+              "    implementation 'com.google.android.material:material:1.11.0'\n"
+              "}\n"
+          )
+          with open("app/build.gradle", "w", encoding="utf-8") as f:
+              f.write(app_build_gradle)
+
+          # 3. Parse Payload dari Telegram
+          raw_payload = os.environ.get("PAYLOAD_DATA", "{}")
+          data = json.loads(raw_payload)
           title = data.get("app_name", "DynamicApp").strip()
+          clean_title = re.sub(r'[^a-zA-Z0-9 ]', '', title).strip()[:25] or "HomeGymTracker"
 
-          clean_title = re.sub(r'[^a-zA-Z0-9 ]', '', title).strip()
-          clean_title = clean_title[:25] if clean_title else "HomeGymTracker"
+          # 4. Tulis AndroidManifest.xml (Tema Native Anti Force-Close)
+          manifest_content = (
+              '\n'
+              '\n'
+              '    \n'
+              '        \n'
+              '            \n'
+              '                \n'
+              '                \n'
+              '            \n'
+              '        \n'
+              '    \n'
+              '\n'
+          )
+          with open("app/src/main/AndroidManifest.xml", "w", encoding="utf-8") as f:
+              f.write(manifest_content)
 
-          # --- 1. GENERATE ANDROIDMANIFEST.XML (KOLOM 1 BARIS 1, BEBAS SPASI AWAL) ---
-          manifest_lines = [
-              '',
-              '',
-              '    ',
-              '        ',
-              '            ',
-              '                ',
-              '                ',
-              '            ',
-              '        ',
-              '    ',
-              ''
-          ]
-          with open("app/src/main/AndroidManifest.xml", "w", encoding="utf-8") as mf:
-              mf.write("\n".join(manifest_lines) + "\n")
-
-          # --- 2. TULIS JAVA DENGAN AUTO-IMPORT DAN ANTI-CRASH ---
+          # 5. Tulis MainActivity.java (Sanitasi String & Auto-Imports)
           j_b64 = data.get("java_code_b64", "")
-          j_code = base64.b64decode(j_b64).decode("utf-8", "ignore")
+          j_code = base64.b64decode(j_b64).decode("utf-8", "ignore") if j_b64 else ""
 
           j_code = re.sub(r'"\s*\n\s*', '" + "', j_code)
           j_code = re.sub(r'\\(\s*\n)', r'\\n\1', j_code)
 
-          auto_imports = """package com.stb.dynamicapp;
-
-          import android.app.Activity;
-          import android.content.Context;
-          import android.content.SharedPreferences;
-          import android.graphics.Canvas;
-          import android.graphics.Color;
-          import android.graphics.Paint;
-          import android.graphics.RectF;
-          import android.os.Bundle;
-          import android.view.View;
-          import android.view.ViewGroup;
-          import android.widget.*;
-          import android.content.Intent;
-          """
+          auto_imports = (
+              "package com.stb.dynamicapp;\n\n"
+              "import android.app.Activity;\n"
+              "import android.content.Context;\n"
+              "import android.content.SharedPreferences;\n"
+              "import android.graphics.Canvas;\n"
+              "import android.graphics.Color;\n"
+              "import android.graphics.Paint;\n"
+              "import android.graphics.RectF;\n"
+              "import android.os.Bundle;\n"
+              "import android.view.View;\n"
+              "import android.view.ViewGroup;\n"
+              "import android.widget.*;\n"
+              "import android.content.Intent;\n"
+          )
           if "package com.stb.dynamicapp;" in j_code:
               j_code = j_code.replace("package com.stb.dynamicapp;", auto_imports.strip())
           else:
@@ -174,26 +170,23 @@ jobs:
           with open("app/src/main/java/com/stb/dynamicapp/MainActivity.java", "w", encoding="utf-8") as f:
               f.write(j_code)
 
-          # --- 3. TULIS XML ANTI-KOSONG DENGAN AUTO-FIX ID ---
-          robust_default_xml = """
-          
-              
-                  
-                  
-                  
-                  
-                  
-                  
-              
-          """
+          # 6. Tulis Layout XML (Garansi Validasi & Anti-Kosong)
+          robust_default_xml = (
+              '\n'
+              '\n'
+              '    \n'
+              '        \n'
+              '        \n'
+              '        \n'
+              '        \n'
+              '        \n'
+              '        \n'
+              '    \n'
+              '\n'
+          )
 
           x_b64 = data.get("xml_code_b64", "")
-          x_code = ""
-          try:
-              if x_b64:
-                  x_code = base64.b64decode(x_b64).decode("utf-8", "ignore").strip()
-          except Exception:
-              pass
+          x_code = base64.b64decode(x_b64).decode("utf-8", "ignore").strip() if x_b64 else ""
 
           if x_code.startswith("\ufeff"):
               x_code = x_code[1:]
@@ -202,30 +195,28 @@ jobs:
           x_code = re.sub(r'android:id="(?!(?:@\+id/|@id/))([^"]+)"', r'android:id="@+id/\1"', x_code)
 
           is_valid = False
-          if len(x_code) >= 50:
-              has_layout = False
-              for kw in ["Layout", "ScrollView"]:
-                  if kw in x_code:
-                      has_layout = True
-                      break
-              if has_layout:
-                  try:
-                      ET.fromstring(x_code)
-                      is_valid = True
-                  except Exception:
-                      is_valid = False
+          if len(x_code) >= 50 and any(kw in x_code for kw in ["Layout", "ScrollView"]):
+              try:
+                  ET.fromstring(x_code)
+                  is_valid = True
+              except Exception:
+                  is_valid = False
 
           final_xml = x_code if is_valid else robust_default_xml
-          target_xml = "app/src/main/res/layout/activity_main.xml"
-          with open(target_xml, "w", encoding="utf-8") as f:
+          xml_path = "app/src/main/res/layout/activity_main.xml"
+          with open(xml_path, "w", encoding="utf-8") as f:
               f.write(final_xml.strip() + "\n")
 
-          # --- 4. GENERATE IKON TEMATIK HD ---
+          # Cek fisik agar tidak 0 byte
+          if os.path.getsize(xml_path) == 0:
+              with open(xml_path, "w", encoding="utf-8") as f:
+                  f.write(robust_default_xml.strip() + "\n")
+
+          # 7. Generate Ikon Tematik HD
           title_lower = title.lower()
           gym_keys = ["gym", "workout", "fitness", "dumbel", "dumbbell", "katrol", "pulley", "otot"]
           calc_keys = ["kalkulator", "hitung", "math", "kasir"]
           game_keys = ["game", "ketuk", "tap", "skor", "play", "main"]
-          notes_keys = ["catatan", "note", "memo", "todo", "tugas", "list"]
 
           if any(k in title_lower for k in gym_keys):
               bg_color, inner_bg, icon_type = (216, 67, 21), (230, 81, 0), "gym"
@@ -233,8 +224,6 @@ jobs:
               bg_color, inner_bg, icon_type = (25, 118, 210), (33, 150, 243), "calc"
           elif any(k in title_lower for k in game_keys):
               bg_color, inner_bg, icon_type = (123, 31, 162), (156, 39, 176), "game"
-          elif any(k in title_lower for k in notes_keys):
-              bg_color, inner_bg, icon_type = (245, 124, 0), (255, 152, 0), "notes"
           else:
               bg_color, inner_bg, icon_type = (48, 63, 159), (63, 81, 181), "star"
 
@@ -256,30 +245,14 @@ jobs:
               for y in [220, 280, 340]:
                   for x in [160, 230]:
                       draw.rounded_rectangle([x, y, x + 52, y + 42], radius=10, fill=inner_bg)
-              draw.rounded_rectangle([300, 220, 352, 262], radius=10, fill=inner_bg)
-              draw.rounded_rectangle([300, 280, 352, 382], radius=10, fill=(255, 87, 34, 255))
           elif icon_type == "game":
               draw.rounded_rectangle([100, 190, 412, 325], radius=60, fill=white)
               draw.ellipse([100, 250, 190, 380], fill=white)
               draw.ellipse([322, 250, 412, 380], fill=white)
-              draw.rounded_rectangle([165, 220, 185, 290], radius=4, fill=bg_color)
-              draw.rounded_rectangle([150, 235, 200, 275], radius=4, fill=bg_color)
-              draw.ellipse([335, 225, 355, 245], fill=(244, 67, 54, 255))
-              draw.ellipse([335, 265, 355, 285], fill=(76, 175, 80, 255))
-              draw.ellipse([315, 245, 335, 265], fill=(33, 150, 243, 255))
-              draw.ellipse([355, 245, 375, 265], fill=(255, 193, 7, 255))
-          elif icon_type == "notes":
-              draw.rounded_rectangle([145, 110, 367, 402], radius=24, fill=white)
-              draw.rounded_rectangle([145, 110, 367, 165], radius=16, fill=(211, 47, 47, 255))
-              for bx in [190, 256, 322]:
-                  draw.ellipse([bx - 10, 125, bx + 10, 145], fill=white)
-              for gy in [210, 260, 310, 360]:
-                  draw.rounded_rectangle([175, gy, 195, gy + 20], radius=5, fill=inner_bg)
-                  draw.rounded_rectangle([215, gy + 3, 335, gy + 17], radius=6, fill=(189, 189, 189, 255))
           else:
               pts = []
               for i in range(10):
-                  ang = i * 3.14159 / 5 - 3.14159 / 2
+                  ang = i * math.pi / 5 - math.pi / 2
                   r = 145 if i % 2 == 0 else 70
                   pts.append((256 + r * math.cos(ang), 256 + r * math.sin(ang)))
               draw.polygon(pts, fill=white)
@@ -288,9 +261,7 @@ jobs:
           icon_final = img.resize((192, 192), Image.LANCZOS)
           icon_final.save("app/src/main/res/drawable/ic_launcher.png", "PNG")
           icon_final.save("app/src/main/res/mipmap/ic_launcher.png", "PNG")
-          RUNNER
-
-          python3 process_app.py
+          print("✅ Proyek, Manifest, Layout, dan Ikon berhasil dibuat tanpa error.")
 
       - name: Setup Gradle Wrapper and Build APK
         run: |
@@ -301,12 +272,12 @@ jobs:
 
       - name: Send APK to Telegram
         if: success()
+        shell: python
         env:
           CHAT_ID: ${{ github.event.client_payload.chat_id }}
           BOT_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           APP_TITLE: ${{ github.event.client_payload.app_name }}
         run: |
-          cat << 'SENDER' > send_apk.py
           import os
           import glob
           import re
@@ -336,7 +307,7 @@ jobs:
           url = f"https://api.telegram.org/bot{token}/sendDocument"
           payload = {
               "chat_id": chat_id,
-              "caption": f"✅ *{title}* berhasil dikompilasi!\n📁 File: `{new_file_name}`\n🎨 Bebas force-close & tema disesuaikan.",
+              "caption": f"✅ *{title}* berhasil dikompilasi!\n📁 File: `{new_file_name}`\n🎨 Tema stabil & bebas force-close.",
               "parse_mode": "Markdown"
           }
 
@@ -345,20 +316,18 @@ jobs:
               r = requests.post(url, data=payload, files=files, timeout=90)
 
           if not r.json().get("ok"):
-              print("Telegram menolak pengiriman file!")
+              print(f"Telegram menolak pengiriman file: {r.text}")
               exit(1)
 
           print(f"✅ APK {new_file_name} berhasil dikirim ke Telegram!")
-          SENDER
-          python3 send_apk.py
 
       - name: Notify Failure to Telegram with Extracted Error
         if: failure()
+        shell: python
         env:
           CHAT_ID: ${{ github.event.client_payload.chat_id }}
           BOT_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
         run: |
-          cat << 'NOTIFIER' > notify_fail.py
           import os
           import requests
 
@@ -374,7 +343,8 @@ jobs:
                   lines = f.readlines()
 
               for idx, line in enumerate(lines):
-                  if "error:" in line.lower() or "failed" in line.lower() or "exception:" in line.lower():
+                  line_lower = line.lower()
+                  if "error:" in line_lower or "failed" in line_lower or "exception:" in line_lower:
                       start = max(0, idx - 1)
                       end = min(len(lines), idx + 4)
                       for l in lines[start:end]:
@@ -389,5 +359,3 @@ jobs:
               "text": msg,
               "parse_mode": "Markdown"
           })
-          NOTIFIER
-          python3 notify_fail.py
