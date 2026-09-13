@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 Generate Android native project (Java + XML) dari payload.json.
-Kebal Stripping: Dibuat tanpa karakter '<' dan '>' mentah agar
-tidak dapat dipotong oleh clipboard atau parser HTML browser.
+Dinamis: Package ID unik per aplikasi (anti-bentrok di HP),
+multi-key JSON reader (anti-fallback 795KB), tanpa simbol raw stripping.
 """
 import json
 import os
@@ -13,7 +13,6 @@ import xml.etree.ElementTree as ET
 
 ROOT = pathlib.Path(".")
 PAYLOAD = pathlib.Path("payload.json")
-PKG_NAME = "com.stb.dynamicapp"
 
 LT = chr(60)  # Simbol '<'
 GT = chr(62)  # Simbol '>'
@@ -24,18 +23,20 @@ def die(msg, code=2):
     sys.exit(code)
 
 
-def safe_get(d, key, default=None):
+def safe_get(d, keys, default=""):
+    """Membaca berbagai kemungkinan nama key dari payload bot."""
     if not isinstance(d, dict):
         return default
-    v = d.get(key, default)
-    if v is None:
-        return default
-    if isinstance(v, str) and v.strip() == "":
-        return default
-    return v
+    if isinstance(keys, str):
+        keys = [keys]
+    for k in keys:
+        v = d.get(k)
+        if v and isinstance(v, str) and v.strip():
+            return v.strip()
+    return default
 
 
-# Template XML aman tanpa karakter '<' dan '>' langsung
+# Template Layout Darurat
 FALLBACK_LAYOUT = (
     LT + '?xml version="1.0" encoding="utf-8"?' + GT + '\n'
     + LT + 'LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"\n'
@@ -59,27 +60,6 @@ FALLBACK_LAYOUT = (
     + '        android:text="Aplikasi berhasil dibangun."\n'
     + '        android:textSize="16sp" /' + GT + '\n\n'
     + LT + '/LinearLayout' + GT + '\n'
-)
-
-MANIFEST_TEMPLATE = (
-    LT + '?xml version="1.0" encoding="utf-8"?' + GT + '\n'
-    + LT + 'manifest xmlns:android="http://schemas.android.com/apk/res/android">\n'
-    + '    ' + LT + 'application\n'
-    + '        android:allowBackup="true"\n'
-    + '        android:icon="@drawable/ic_launcher"\n'
-    + '        android:label="@string/app_name"\n'
-    + '        android:supportsRtl="true"\n'
-    + '        android:theme="@android:style/Theme.DeviceDefault.NoActionBar">\n'
-    + '        ' + LT + 'activity\n'
-    + '            android:name=".MainActivity"\n'
-    + '            android:exported="true">\n'
-    + '            ' + LT + 'intent-filter>\n'
-    + '                ' + LT + 'action android:name="android.intent.action.MAIN" /' + GT + '\n'
-    + '                ' + LT + 'category android:name="android.intent.category.LAUNCHER" /' + GT + '\n'
-    + '            ' + LT + '/intent-filter>\n'
-    + '        ' + LT + '/activity>\n'
-    + '    ' + LT + '/application>\n'
-    + LT + '/manifest' + GT + '\n'
 )
 
 COLORS_XML = (
@@ -170,12 +150,12 @@ def sanitize_layout(raw_xml):
     xml = strip_code_fences(raw_xml)
     xml = ensure_root_xml(xml)
     if not xml or len(xml.strip()) in range(0, 30):
-        print("[WARN] Layout kosong/terlalu pendek, memakai fallback.", file=sys.stderr)
+        print("[WARN] Kode Layout kosong/hilang! Memakai fallback template.", file=sys.stderr)
         return FALLBACK_LAYOUT
     xml = fix_xml_escapes(xml)
     xml = fix_missing_id_prefix(xml)
     if not validate_xml(xml):
-        print("[WARN] Layout rusak, memakai fallback.", file=sys.stderr)
+        print("[WARN] XML layout rusak! Memakai fallback template.", file=sys.stderr)
         return FALLBACK_LAYOUT
     return xml
 
@@ -222,7 +202,7 @@ def sanitize_java_strings(java):
 def sanitize_java(raw_java, pkg):
     java = strip_code_fences(raw_java)
     if not java or "class " not in java:
-        print("[WARN] Java kosong/tidak valid, memakai MainActivity fallback.", file=sys.stderr)
+        print("[WARN] Kode Java kosong/hilang! Memakai MainActivity fallback.", file=sys.stderr)
         return (
             f"package {pkg};\n\n"
             "import android.app.Activity;\n"
@@ -238,6 +218,7 @@ def sanitize_java(raw_java, pkg):
 
     java = sanitize_java_strings(java)
 
+    # Sinkronkan nama package
     if re.search(r"package\s+[\w\.]+;", java):
         java = re.sub(r"package\s+[\w\.]+;", f"package {pkg};", java)
     else:
@@ -272,7 +253,8 @@ def main():
     except Exception as e:
         die(f"payload.json bukan format JSON valid: {e}")
 
-    raw_name = safe_get(data, "app_name", "DynamicApp")
+    # 1. Bersihkan Nama Aplikasi
+    raw_name = safe_get(data, ["app_name", "title", "name"], "DynamicApp")
     clean_app_name = re.sub(LT + r"[^" + GT + r"]+" + GT, "", raw_name)
     clean_app_name = (
         clean_app_name.replace("&", "&")
@@ -283,14 +265,25 @@ def main():
     if not clean_app_name:
         clean_app_name = "DynamicApp"
 
-    layout_raw = safe_get(data, "activity_main_xml", "")
-    java_raw = safe_get(data, "main_activity_java", "")
+    # 2. Package Name Dinamis Berdasarkan Nama Aplikasi (Anti-Bentrok)
+    pkg_suffix = re.sub(r"[^a-zA-Z0-9]", "", clean_app_name).lower()
+    if not pkg_suffix or len(pkg_suffix) < 3:
+        pkg_suffix = "dynamicapp"
+    pkg = f"com.stb.{pkg_suffix}"
 
-    pkg = PKG_NAME
+    # 3. Baca Kode Layout & Java (Mendukung Multi-Key dari Bot STB)
+    layout_raw = safe_get(data, ["activity_main_xml", "layout_xml", "layout", "xml"])
+    java_raw = safe_get(data, ["main_activity_java", "java_code", "main_activity", "java", "code"])
+
+    print(f"[*] App Name        : {clean_app_name}")
+    print(f"[*] Dynamic Package : {pkg}")
+    print(f"[*] Input XML size  : {len(layout_raw)} bytes")
+    print(f"[*] Input Java size : {len(java_raw)} bytes")
+
     layout_xml = sanitize_layout(layout_raw)
     main_java = sanitize_java(java_raw, pkg)
 
-    # 1. Gradle Project Settings
+    # 4. Konfigurasi Gradle
     write(ROOT / "settings.gradle", (
         "pluginManagement {\n"
         "    repositories {\n"
@@ -306,7 +299,7 @@ def main():
         "        mavenCentral()\n"
         "    }\n"
         "}\n"
-        "rootProject.name = 'DynamicApp'\n"
+        f"rootProject.name = '{pkg_suffix}'\n"
         "include ':app'\n"
     ))
 
@@ -322,7 +315,6 @@ def main():
         "android.nonTransitiveRClass=true\n"
     ))
 
-    # 2. App Module Build Configuration
     write(ROOT / "app" / "build.gradle", (
         "plugins { id 'com.android.application' }\n\n"
         "android {\n"
@@ -348,10 +340,30 @@ def main():
         "}\n"
     ))
 
-    # 3. AndroidManifest.xml
-    write(ROOT / "app" / "src" / "main" / "AndroidManifest.xml", MANIFEST_TEMPLATE)
+    # 5. Manifest (Menggunakan Package Baru)
+    manifest_content = (
+        LT + '?xml version="1.0" encoding="utf-8"?' + GT + '\n'
+        + LT + 'manifest xmlns:android="http://schemas.android.com/apk/res/android">\n'
+        + '    ' + LT + 'application\n'
+        + '        android:allowBackup="true"\n'
+        + '        android:icon="@drawable/ic_launcher"\n'
+        + '        android:label="@string/app_name"\n'
+        + '        android:supportsRtl="true"\n'
+        + '        android:theme="@android:style/Theme.DeviceDefault.NoActionBar">\n'
+        + '        ' + LT + 'activity\n'
+        + '            android:name=".MainActivity"\n'
+        + '            android:exported="true">\n'
+        + '            ' + LT + 'intent-filter>\n'
+        + '                ' + LT + 'action android:name="android.intent.action.MAIN" /' + GT + '\n'
+        + '                ' + LT + 'category android:name="android.intent.category.LAUNCHER" /' + GT + '\n'
+        + '            ' + LT + '/intent-filter>\n'
+        + '        ' + LT + '/activity>\n'
+        + '    ' + LT + '/application>\n'
+        + LT + '/manifest' + GT + '\n'
+    )
+    write(ROOT / "app" / "src" / "main" / "AndroidManifest.xml", manifest_content)
 
-    # 4. Resources
+    # 6. Resources & Code
     strings_content = (
         LT + '?xml version="1.0" encoding="utf-8"?' + GT + '\n'
         + LT + 'resources' + GT + '\n'
@@ -363,13 +375,10 @@ def main():
     write(ROOT / "app" / "src" / "main" / "res" / "drawable" / "ic_launcher.xml", IC_LAUNCHER_XML)
     write(ROOT / "app" / "src" / "main" / "res" / "layout" / "activity_main.xml", layout_xml)
 
-    # 5. Java Source File
     java_path = ROOT / "app" / "src" / "main" / "java" / pathlib.Path(*pkg.split("."))
     write(java_path / "MainActivity.java", main_java)
 
-    print(f"[OK] Proyek Android native berhasil dibuat di: {ROOT.resolve()}")
-    print(f"[OK] Package: {pkg}")
-    print(f"[OK] App Name: {clean_app_name}")
+    print(f"[OK] Proyek Android berhasil dibangun!")
 
 
 if __name__ == "__main__":
