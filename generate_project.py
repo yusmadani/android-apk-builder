@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
 Generate Android native project (Java + XML) dari payload.json.
-Bulletproof: Root direktori utama, package sinkron, auto-fix XML,
+Bulletproof: Anti-stripping Base64/Hex, package sinkron, auto-fix XML,
 auto-escape Java literal, manifest bersih tanpa spasi prolog.
 """
+import base64
 import json
 import os
-import re
 import pathlib
+import re
 import sys
 import xml.etree.ElementTree as ET
 
@@ -32,16 +33,52 @@ def safe_get(d, key, default=None):
     return v
 
 
-# ---------- XML Helpers ----------
-FALLBACK_LAYOUT = """
+# Template XML dikodekan Base64 agar kebal dari stripping browser/clipboard
+FALLBACK_LAYOUT = base64.b64decode(
+    "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4K"
+    "PExpbmVhckxheW91dCB4bWxuczphbmRyb2lkPSJodHRwOi8vc2No"
+    "ZW1hcy5hbmRyb2lkLmNvbS9hcGsvcmVzL2FuZHJvaWQiCiAgICBh"
+    "bmRyb2lkOmxheW91dF93aWR0aD0ibWF0Y2hfcGFyZW50IgogICAg"
+    "YW5kcm9pZDpsYXlvdXRfaGVpZ2h0PSJtYXRjaF9wYXJlbnQiCiAg"
+    "ICBhbmRyb2lkOm9yaWVudGF0aW9uPSJ2ZXJ0aWNhbCIKICAgIGFu"
+    "ZHJvaWQ6Z3Jhdml0eT0iY2VudGVyIgogICAgYW5kcm9pZDpwYWRk"
+    "aW5nPSIyNGRwIj4KICAgIDxUZXh0VmlldwogICAgICAgIGFuZHJv"
+    "aWQ6aWQ9IkAraWQvdHZUaXRsZSIKICAgICAgICBhbmRyb2lkOmxh"
+    "eW91dF93aWR0aD0id3JhcF9jb250ZW50IgogICAgICAgIGFuZHJv"
+    "aWQ6bGF5b3V0X2hlaWdodD0id3JhcF9jb250ZW50IgogICAgICAg"
+    "IGFuZHJvaWQ6dGV4dD0iQHN0cmluZy9hcHBfbmFtZSIKICAgICAg"
+    "ICBhbmRyb2lkOnRleHRTaXplPSIyMnNwIgogICAgICAgIGFuZHJv"
+    "aWQ6dGV4dFN0eWxlPSJib2xkIiAvPgoKICAgIDxUZXh0Vmlldwog"
+    "ICAgICAgIGFuZHJvaWQ6aWQ9IkAraWQvdHZNZXNzYWdlIgogICAg"
+    "ICAgIGFuZHJvaWQ6bGF5b3V0X3dpZHRoPSJ3cmFwX2NvbnRlbnQi"
+    "CiAgICAgICAgYW5kcm9pZDpsYXlvdXRfaGVpZ2h0PSJ3cmFwX2Nv"
+    "bnRlbnQiCiAgICAgICAgYW5kcm9pZDpsYXlvdXRfbWFyZ2luVG9w"
+    "PSIxMmRwIgogICAgICAgIGFuZHJvaWQ6dGV4dD0iQXBsaWthc2kg"
+    "YmVyaGFzaWwgZGliYW5ndW4uIgogICAgICAgIGFuZHJvaWQ6dGV4"
+    "dFNpemU9IjE2c3AiIC8+CjwvTGluZWFyTGF5b3V0Pgo="
+).decode("utf-8")
 
-
-    
-
-    
-
-
-"""
+MANIFEST_TEMPLATE = base64.b64decode(
+    "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4K"
+    "PG1hbmlmZXN0IHhtbG5zOmFuZHJvaWQ9Imh0dHA6Ly9zY2hlbWFz"
+    "LmFuZHJvaWQuY29tL2Fway9yZXMvYW5kcm9pZCI+CiAgICA8YXBw"
+    "bGljYXRpb24KICAgICAgICBhbmRyb2lkOmFsbG93QmFja3VwPSJ0"
+    "cnVlIgogICAgICAgIGFuZHJvaWQ6aWNvbj0iQGRyYXdhYmxlL2lj"
+    "X2xhdW5jaGVyIgogICAgICAgIGFuZHJvaWQ6bGFiZWw9IkBzdHJp"
+    "bmcvYXBwX25hbWUiCiAgICAgICAgYW5kcm9pZDpzdXBwb3J0c1J0"
+    "bD0idHJ1ZSIKICAgICAgICBhbmRyb2lkOnRoZW1lPSJAYW5kcm9p"
+    "ZDpzdHlsZS9UaGVtZS5EZXZpY2VEZWZhdWx0Lk5vQWN0aW9uQmFy"
+    "Ij4KICAgICAgICA8YWN0aXZpdHkKICAgICAgICAgICAgYW5kcm9p"
+    "ZDpuYW1lPSIuTWFpbkFjdGl2aXR5IgogICAgICAgICAgICBhbmRy"
+    "b2lkOmV4cG9ydGVkPSJ0cnVlIj4KICAgICAgICAgICAgPGludGVu"
+    "dC1maWx0ZXI+CiAgICAgICAgICAgICAgICA8YWN0aW9uIGFuZHJv"
+    "aWQ6bmFtZT0iYW5kcm9pZC5pbnRlbnQuYWN0aW9uLk1BSU4iIC8+"
+    "CiAgICAgICAgICAgICAgICA8Y2F0ZWdvcnkgYW5kcm9pZDpuYW1l"
+    "PSJhbmRyb2lkLmludGVudC5jYXRlZ29yeS5MQVVOQ0hFUiIgLz4K"
+    "ICAgICAgICAgICAgPC9pbnRlbnQtZmlsdGVyPgogICAgICAgIDwv"
+    "YWN0aXZpdHk+CiAgICA8L2FwcGxpY2F0aW9uPgo8L21hbmlmZXN0"
+    "Pgo="
+).decode("utf-8")
 
 
 def strip_code_fences(s: str) -> str:
@@ -88,7 +125,12 @@ def ensure_root_xml(xml: str) -> str:
     if not xml:
         return ""
     xml = xml.lstrip("\ufeff \t\r\n")
-    if not xml.startswith(" bool:
+    if not xml.startswith("\x3c?xml"):
+        xml = '\x3c?xml version="1.0" encoding="utf-8"?>\n' + xml
+    return xml
+
+
+def validate_xml(xml: str) -> bool:
     try:
         ET.fromstring(xml)
         return True
@@ -111,14 +153,11 @@ def sanitize_layout(raw_xml: str) -> str:
     return xml
 
 
-# ---------- Java Helpers ----------
 def sanitize_java_strings(java: str) -> str:
     if not java:
         return java
     java = strip_code_fences(java)
     java = java.replace("\r\n", "\n").replace("\r", "\n")
-
-    # Sambung baris string literal yang terputus enter fisik
     java = re.sub(r'"\s*\n\s*', '" + "', java)
 
     out = []
@@ -172,17 +211,14 @@ def sanitize_java(raw_java: str, pkg: str) -> str:
 
     java = sanitize_java_strings(java)
 
-    # Sinkronkan package name ke target seragam
     if re.search(r"package\s+[\w\.]+;", java):
         java = re.sub(r"package\s+[\w\.]+;", f"package {pkg};", java)
     else:
         java = f"package {pkg};\n\n" + java
 
-    # Pastikan turunan kelas selalu Activity native agar aman dengan tema DeviceDefault
     java = re.sub(r"extends\s+AppCompatActivity", "extends Activity", java)
     java = re.sub(r"import\s+androidx\.appcompat\.app\.AppCompatActivity;", "", java)
 
-    # Tambahkan import esensial jika belum ada
     essential_imports = [
         "import android.app.Activity;",
         "import android.os.Bundle;",
@@ -277,45 +313,39 @@ def main():
         "}\n"
     ))
 
-    # 3. AndroidManifest.xml (Wajib mulai di byte ke-0 tanpa spasi liar)
-    manifest = (
-        '\n'
-        '\n'
-        '    \n'
-        '        \n'
-        '            \n'
-        '                \n'
-        '                \n'
-        '            \n'
-        '        \n'
-        '    \n'
-        '\n'
-    )
-    write(ROOT / "app" / "src" / "main" / "AndroidManifest.xml", manifest)
+    # 3. AndroidManifest.xml (Murni dari Base64, byte ke-0 '<')
+    write(ROOT / "app" / "src" / "main" / "AndroidManifest.xml", MANIFEST_TEMPLATE)
 
     # 4. Resources
     write(ROOT / "app" / "src" / "main" / "res" / "values" / "strings.xml", (
-        '\n'
-        '\n'
-        f'    {safe_app_name}\n'
-        '\n'
+        '\x3c?xml version="1.0" encoding="utf-8"?>\n'
+        '\x3cresources>\n'
+        f'    \x3cstring name="app_name">{safe_app_name}\x3c/string>\n'
+        '\x3c/resources>\n'
     ))
 
     write(ROOT / "app" / "src" / "main" / "res" / "values" / "colors.xml", (
-        '\n'
-        '\n'
-        '    #FF000000\n'
-        '    #FFFFFFFF\n'
-        '\n'
+        '\x3c?xml version="1.0" encoding="utf-8"?>\n'
+        '\x3cresources>\n'
+        '    \x3ccolor name="black">#FF000000\x3c/color>\n'
+        '    \x3ccolor name="white">#FFFFFFFF\x3c/color>\n'
+        '\x3c/resources>\n'
     ))
 
-    # Vector Icon bawaan agar @drawable/ic_launcher selalu tersedia
     write(ROOT / "app" / "src" / "main" / "res" / "drawable" / "ic_launcher.xml", (
-        '\n'
-        '\n'
-        '    \n'
-        '    \n'
-        '\n'
+        '\x3c?xml version="1.0" encoding="utf-8"?>\n'
+        '\x3cvector xmlns:android="http://schemas.android.com/apk/res/android"\n'
+        '    android:width="108dp"\n'
+        '    android:height="108dp"\n'
+        '    android:viewportWidth="108"\n'
+        '    android:viewportHeight="108">\n'
+        '    \x3cpath\n'
+        '        android:fillColor="#008577"\n'
+        '        android:pathData="M0,0h108v108h-108z"/>\n'
+        '    \x3cpath\n'
+        '        android:fillColor="#FFFFFF"\n'
+        '        android:pathData="M54,20L74,40H60V74H48V40H34L54,20Z"/>\n'
+        '\x3c/vector>\n'
     ))
 
     write(ROOT / "app" / "src" / "main" / "res" / "layout" / "activity_main.xml", layout_xml)
