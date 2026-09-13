@@ -99,8 +99,20 @@ jobs:
           }
           EOF
 
-          # 5. AndroidManifest.xml
-          echo "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPG1hbmlmZXN0IHhtbG5zOmFuZHJvaWQ9Imh0dHA6Ly9zY2hlbWFzLmFuZHJvaWQuY29tL2Fway9yZXMvYW5kcm9pZCI+CiAgICA8YXBwbGljYXRpb24KICAgICAgICBhbmRyb2lkOmFsbG93QmFja3VwPSJ0cnVlIgogICAgICAgIGFuZHJvaWQ6aWNvbj0iQGRyYXdhYmxlL2ljX2xhdW5jaGVyIgogICAgICAgIGFuZHJvaWQ6cm91bmRJY29uPSJAZHJhd2FibGUvaWNfbGF1bmNoZXIiCiAgICAgICAgYW5kcm9pZDpsYWJlbD0iRHluYW1pY0FwcCIKICAgICAgICBhbmRyb2lkOnN1cHBvcnRzUnRsPSJ0cnVlIgogICAgICAgIGFuZHJvaWQ6dGhlbWU9IkBzdHlsZS9UaGVtZS5NYXRlcmlhbENvbXBvbmVudHMuRGF5TmlnaHQuRGFya0FjdGlvbkJhciI+CiAgICAgICAgPGFjdGl2aXR5CiAgICAgICAgICAgIGFuZHJvaWQ6bmFtZT0iLk1haW5BY3Rpdml0eSIKICAgICAgICAgICAgYW5kcm9pZDpleHBvcnRlZD0idHJ1ZSI+CiAgICAgICAgICAgIDxpbnRlbnQtZmlsdGVyPgogICAgICAgICAgICAgICAgPGFjdGlvbiBhbmRyb2lkOm5hbWU9ImFuZHJvaWQuaW50ZW50LmFjdGlvbi5NQUlOIiAvPgogICAgICAgICAgICAgICAgPGNhdGVnb3J5IGFuZHJvaWQ6bmFtZT0iYW5kcm9pZC5pbnRlbnQuY2F0ZWdvcnkuTEFVTkNIRVIiIC8+CiAgICAgICAgICAgIDwvaW50ZW50LWZpbHRlcj4KICAgICAgICA8L2FjdGl2aXR5PgogICAgPC9hcHBsaWNhdGlvbj4KPC9tYW5pZmVzdD4=" | base64 -d > app/src/main/AndroidManifest.xml
+          # 5. AndroidManifest.xml (Menggunakan DeviceDefault.NoActionBar agar tidak crash saat dibuka)
+          cat << 'EOF' > app/src/main/AndroidManifest.xml
+          
+          
+              
+                  
+                      
+                          
+                          
+                      
+                  
+              
+          
+          EOF
 
       - name: Inject Dynamic App Code, Themed Icon & Sanitize via Python
         env:
@@ -120,14 +132,13 @@ jobs:
           title = data.get("app_name", "DynamicApp").strip()
 
           # ==========================================
-          # 1. SANITASI & PERBAIKAN STRING LITERAL JAVA
+          # 1. TULIS JAVA, SUNTIKKAN IMPORT, & CEGAH CRASH
           # ==========================================
           j_b64 = data.get("java_code_b64", "")
           j_code = base64.b64decode(j_b64).decode("utf-8", "ignore")
 
-          # Perbaiki baris terpotong karena newline liar dalam string literal: "\n -> direkatkan
+          # Perbaiki string literal yang terputus enter fisik
           j_code = re.sub(r'"\s*\n\s*', '" + "', j_code)
-          # Perbaiki unescaped backslash di ujung baris
           j_code = re.sub(r'\\(\s*\n)', r'\\n\1', j_code)
 
           auto_imports = """package com.stb.dynamicapp;
@@ -150,148 +161,45 @@ jobs:
           else:
               j_code = auto_imports.strip() + "\n" + j_code
 
+          # Pastikan MainActivity selalu extends Activity biasa agar cocok dengan tema
+          j_code = re.sub(r'public\s+class\s+MainActivity\s+extends\s+[A-Za-z0-9_]+', 'public class MainActivity extends Activity', j_code)
+
           with open("app/src/main/java/com/stb/dynamicapp/MainActivity.java", "w", encoding="utf-8") as f:
               f.write(j_code)
 
           # ==========================================
-          # 2. SANITASI & VALIDASI LAYOUT XML (AUTO-FIX ID)
+          # 2. SANITASI & VALIDASI LAYOUT XML (ANTI-KOSONG & AUTO-FIX ID)
           # ==========================================
-          fallback_xml = """
+          robust_default_xml = """
           
+              
+                  
+                  
+                  
+                  
+                  
+                  
               
           """
 
           x_b64 = data.get("xml_code_b64", "")
+          x_code = ""
           try:
-              x_code = base64.b64decode(x_b64).decode("utf-8", "ignore").strip()
-          except Exception:
-              x_code = ""
+              if x_b64:
+                  x_code = base64.b64decode(x_b64).decode("utf-8", "ignore").strip()
+          except Exception as e:
+              print(f"[WARN] Gagal decode base64 XML: {e}")
 
           if x_code.startswith("\ufeff"):
               x_code = x_code[1:]
 
           # Escape simbol & mentah
           x_code = re.sub(r'&(?!(amp|lt|gt|quot|apos);)', '&', x_code)
-          # Auto-fix ID tanpa @+id/
+          # Auto-fix ID yang lupa ditulis @+id/
           x_code = re.sub(r'android:id="(?!(?:@\+id/|@id/))([^"]+)"', r'android:id="@+id/\1"', x_code)
 
-          is_valid_xml = False
-          if len(x_code) >= 30:
-              try:
-                  ET.fromstring(x_code)
-                  is_valid_xml = True
-              except Exception as err:
-                  print(f"[WARN] XML rusak ({err}). Menggunakan fallback.")
-
-          final_xml = x_code if is_valid_xml else fallback_xml
-
-          with open("app/src/main/res/layout/activity_main.xml", "w", encoding="utf-8") as f:
-              f.write(final_xml)
-
-          # ==========================================
-          # 3. GENERATE THEMED ICON HD
-          # ==========================================
-          title_lower = title.lower()
-          if any(k in title_lower for k in ["gym", "workout", "fitness", "dumbel", "dumbbell", "katrol", "pulley", "otot"]):
-              bg_color, inner_bg, icon_type = (216, 67, 21), (230, 81, 0), "gym"
-          elif any(k in title_lower for k in ["kalkulator", "hitung", "math", "kasir"]):
-              bg_color, inner_bg, icon_type = (25, 118, 210), (33, 150, 243), "calc"
-          elif any(k in title_lower for k in ["game", "ketuk", "tap", "skor", "play", "main"]):
-              bg_color, inner_bg, icon_type = (123, 31, 162), (156, 39, 176), "game"
-          elif any(k in title_lower for k in ["catatan", "note", "memo", "todo", "tugas", "list"]):
-              bg_color, inner_bg, icon_type = (245, 124, 0), (255, 152, 0), "notes"
-          elif any(k in title_lower for k in ["stres", "relaks", "tenang", "sehat", "meditasi", "hati", "pereda"]):
-              bg_color, inner_bg, icon_type = (0, 121, 107), (0, 150, 136), "zen"
-          elif any(k in title_lower for k in ["musik", "lagu", "audio", "suara"]):
-              bg_color, inner_bg, icon_type = (211, 47, 47), (244, 67, 54), "music"
-          else:
-              bg_color, inner_bg, icon_type = (48, 63, 159), (63, 81, 181), "star"
-
-          img = Image.new("RGBA", (512, 512), (0, 0, 0, 0))
-          draw = ImageDraw.Draw(img)
-          draw.rounded_rectangle([24, 24, 488, 488], radius=115, fill=bg_color)
-          draw.ellipse([64, 64, 448, 448], fill=inner_bg)
-          white = (255, 255, 255, 255)
-
-          if icon_type == "gym":
-              draw.rounded_rectangle([190, 244, 322, 268], radius=8, fill=white)
-              draw.rounded_rectangle([140, 180, 190, 332], radius=14, fill=white)
-              draw.rounded_rectangle([110, 205, 140, 307], radius=10, fill=white)
-              draw.rounded_rectangle([322, 180, 372, 332], radius=14, fill=white)
-              draw.rounded_rectangle([372, 205, 402, 307], radius=10, fill=white)
-          elif icon_type == "calc":
-              draw.rounded_rectangle([130, 110, 382, 402], radius=28, fill=(255, 255, 255, 230))
-              draw.rounded_rectangle([155, 135, 357, 195], radius=12, fill=bg_color)
-              for y in [220, 280, 340]:
-                  for x in [160, 230]:
-                      draw.rounded_rectangle([x, y, x + 52, y + 42], radius=10, fill=inner_bg)
-              draw.rounded_rectangle([300, 220, 352, 262], radius=10, fill=inner_bg)
-              draw.rounded_rectangle([300, 280, 352, 382], radius=10, fill=(255, 87, 34, 255))
-          elif icon_type == "game":
-              draw.rounded_rectangle([100, 190, 412, 325], radius=60, fill=white)
-              draw.ellipse([100, 250, 190, 380], fill=white)
-              draw.ellipse([322, 250, 412, 380], fill=white)
-              draw.rounded_rectangle([165, 220, 185, 290], radius=4, fill=bg_color)
-              draw.rounded_rectangle([150, 235, 200, 275], radius=4, fill=bg_color)
-              draw.ellipse([335, 225, 355, 245], fill=(244, 67, 54, 255))
-              draw.ellipse([335, 265, 355, 285], fill=(76, 175, 80, 255))
-              draw.ellipse([315, 245, 335, 265], fill=(33, 150, 243, 255))
-              draw.ellipse([355, 245, 375, 265], fill=(255, 193, 7, 255))
-          elif icon_type == "notes":
-              draw.rounded_rectangle([145, 110, 367, 402], radius=24, fill=white)
-              draw.rounded_rectangle([145, 110, 367, 165], radius=16, fill=(211, 47, 47, 255))
-              for bx in [190, 256, 322]:
-                  draw.ellipse([bx - 10, 125, bx + 10, 145], fill=white)
-              for gy in [210, 260, 310, 360]:
-                  draw.rounded_rectangle([175, gy, 195, gy + 20], radius=5, fill=inner_bg)
-                  draw.rounded_rectangle([215, gy + 3, 335, gy + 17], radius=6, fill=(189, 189, 189, 255))
-          elif icon_type == "zen":
-              draw.ellipse([140, 160, 270, 290], fill=white)
-              draw.ellipse([242, 160, 372, 290], fill=white)
-              draw.polygon([(143, 245), (369, 245), (256, 385)], fill=white)
-              draw.ellipse([175, 190, 210, 225], fill=inner_bg)
-          elif icon_type == "music":
-              draw.ellipse([140, 310, 215, 385], fill=white)
-              draw.ellipse([275, 270, 350, 345], fill=white)
-              draw.rectangle([195, 160, 215, 345], fill=white)
-              draw.rectangle([330, 120, 350, 305], fill=white)
-              draw.polygon([(195, 160), (350, 120), (350, 175), (195, 215)], fill=white)
-          else:
-              pts = []
-              for i in range(10):
-                  ang = i * 3.14159 / 5 - 3.14159 / 2
-                  r = 145 if i % 2 == 0 else 70
-                  pts.append((256 + r * math.cos(ang), 256 + r * math.sin(ang)))
-              draw.polygon(pts, fill=white)
-              draw.ellipse([230, 230, 282, 282], fill=bg_color)
-
-          icon_final = img.resize((192, 192), Image.LANCZOS)
-          icon_final.save("app/src/main/res/drawable/ic_launcher.png", "PNG")
-          icon_final.save("app/src/main/res/mipmap/ic_launcher.png", "PNG")
-
-          # ==========================================
-          # 4. SINKRONISASI MANIFEST (LABEL AMAN)
-          # ==========================================
-          clean_title = re.sub(r'[^a-zA-Z0-9 ]', '', title).strip()
-          clean_title = clean_title[:25] if clean_title else "HomeGymTracker"
-
-          manifest_file = "app/src/main/AndroidManifest.xml"
-          if os.path.exists(manifest_file):
-              with open(manifest_file, "r", encoding="utf-8") as mf:
-                  m_text = mf.read()
-              m_text = m_text.replace('android:label="DynamicApp"', f'android:label="{clean_title}"')
-              with open(manifest_file, "w", encoding="utf-8") as mf:
-                  mf.write(m_text)
-
-          print(f"✅ Injeksi sukses dengan label aplikasi: {clean_title}")
-          PYEOF
-
-      - name: Setup Gradle Wrapper and Build APK
-        run: |
-          gradle wrapper --gradle-version 8.5
-          chmod +x gradlew
-          set -o pipefail
-          ./gradlew assembleDebug -Pandroid.useAndroidX=true -Pandroid.enableJetifier=true --stacktrace 2>&1 | tee build_output.log
+          is_valid = False
+          if len(x_code) >= 50 and ("&1 | tee build_output.log
 
       - name: Send APK to Telegram
         if: success()
