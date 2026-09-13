@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 Generate Android native project (Java + XML) dari payload.json.
-Bulletproof: Anti-stripping Base64/Hex, package sinkron, auto-fix XML,
-auto-escape Java literal, manifest bersih tanpa spasi prolog.
+Bulletproof: Anti-HTML-stripping, tanpa type-hint arrow, root direktori utama,
+package sinkron, manifest bersih tanpa spasi prolog.
 """
 import base64
 import json
@@ -15,9 +15,10 @@ import xml.etree.ElementTree as ET
 ROOT = pathlib.Path(".")
 PAYLOAD = pathlib.Path("payload.json")
 PKG_NAME = "com.stb.dynamicapp"
+LT = chr(60)  # Karakter '<' aman dari pemotongan HTML clipboard
 
 
-def die(msg: str, code: int = 2):
+def die(msg, code=2):
     print(f"[FATAL] {msg}", file=sys.stderr)
     sys.exit(code)
 
@@ -33,7 +34,7 @@ def safe_get(d, key, default=None):
     return v
 
 
-# Template XML dikodekan Base64 agar kebal dari stripping browser/clipboard
+# Template XML Base64 (100% kebal stripping clipboard)
 FALLBACK_LAYOUT = base64.b64decode(
     "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4K"
     "PExpbmVhckxheW91dCB4bWxuczphbmRyb2lkPSJodHRwOi8vc2No"
@@ -80,8 +81,30 @@ MANIFEST_TEMPLATE = base64.b64decode(
     "Pgo="
 ).decode("utf-8")
 
+COLORS_XML = base64.b64decode(
+    "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4K"
+    "PHJlc291cmNlcz4KICAgIDxjb2xvciBuYW1lPSJibGFjayI+I0ZG"
+    "MDAwMDAwPC9jb2xvcj4KICAgIDxjb2xvciBuYW1lPSJ3aGl0ZSI+"
+    "I0ZGRkZGRkZGRjwvY29sb3I+CjwvcmVzb3VyY2VzPgo="
+).decode("utf-8")
 
-def strip_code_fences(s: str) -> str:
+IC_LAUNCHER_XML = base64.b64decode(
+    "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4K"
+    "PHZlY3RvciB4bWxuczphbmRyb2lkPSJodHRwOi8vc2NoZW1hcy5h"
+    "bmRyb2lkLmNvbS9hcGsvcmVzL2FuZHJvaWQiCiAgICBhbmRyb2lk"
+    "OndpZHRoPSIxMDhkcCIKICAgIGFuZHJvaWQ6aGVpZ2h0PSIxMDhk"
+    "cCIKICAgIGFuZHJvaWQ6dmlld3BvcnRXaWR0aD0iMTA4IgogICAg"
+    "YW5kcm9pZDp2aWV3cG9ydEhlaWdodD0iMTA4Ij4KICAgIDxwYXRo"
+    "CiAgICAgICAgYW5kcm9pZDpmaWxsQ29sb3I9IiMwMDg1NzciCiAg"
+    "ICAgICAgYW5kcm9pZDpwYXRoRGF0YT0iTTAsMGgxMDh2MTA4aC0x"
+    "MDh6Ii8+CiAgICA8cGF0aAogICAgICAgIGFuZHJvaWQ6ZmlsbENv"
+    "bG9yPSIjRkZGRkZGIgogICAgICAgIGFuZHJvaWQ6cGF0aERhdGE9"
+    "Ik01NCwyMEw3NCw0MEg2MFY3NEg0OFY0MEgzNEw1NCwyMFoiLz4K"
+    "PC92ZWN0b3I+Cg=="
+).decode("utf-8")
+
+
+def strip_code_fences(s):
     if not isinstance(s, str):
         return ""
     s = s.strip()
@@ -90,7 +113,7 @@ def strip_code_fences(s: str) -> str:
     return s.strip()
 
 
-def fix_xml_escapes(xml: str) -> str:
+def fix_xml_escapes(xml):
     if not xml:
         return xml
     placeholders = {}
@@ -107,7 +130,7 @@ def fix_xml_escapes(xml: str) -> str:
     return xml
 
 
-def fix_missing_id_prefix(xml: str) -> str:
+def fix_missing_id_prefix(xml):
     def repl(m):
         val = m.group(2)
         if val.startswith("@+id/") or val.startswith("@android:") or val.startswith("@id/android:"):
@@ -121,16 +144,17 @@ def fix_missing_id_prefix(xml: str) -> str:
     return re.sub(r'(android:id)="([^"]*)"', repl, xml)
 
 
-def ensure_root_xml(xml: str) -> str:
+def ensure_root_xml(xml):
     if not xml:
         return ""
     xml = xml.lstrip("\ufeff \t\r\n")
-    if not xml.startswith("\x3c?xml"):
-        xml = '\x3c?xml version="1.0" encoding="utf-8"?>\n' + xml
+    header = LT + '?xml version="1.0" encoding="utf-8"?>\n'
+    if not xml.startswith(LT + "?xml"):
+        xml = header + xml
     return xml
 
 
-def validate_xml(xml: str) -> bool:
+def validate_xml(xml):
     try:
         ET.fromstring(xml)
         return True
@@ -139,7 +163,7 @@ def validate_xml(xml: str) -> bool:
         return False
 
 
-def sanitize_layout(raw_xml: str) -> str:
+def sanitize_layout(raw_xml):
     xml = strip_code_fences(raw_xml)
     xml = ensure_root_xml(xml)
     if not xml or len(xml.strip()) < 30:
@@ -153,7 +177,7 @@ def sanitize_layout(raw_xml: str) -> str:
     return xml
 
 
-def sanitize_java_strings(java: str) -> str:
+def sanitize_java_strings(java):
     if not java:
         return java
     java = strip_code_fences(java)
@@ -192,7 +216,7 @@ def sanitize_java_strings(java: str) -> str:
     return "".join(out)
 
 
-def sanitize_java(raw_java: str, pkg: str) -> str:
+def sanitize_java(raw_java, pkg):
     java = strip_code_fences(raw_java)
     if not java or "class " not in java:
         print("[WARN] Java kosong/tidak valid, memakai MainActivity fallback.", file=sys.stderr)
@@ -232,7 +256,7 @@ def sanitize_java(raw_java: str, pkg: str) -> str:
     return java
 
 
-def write(path: pathlib.Path, content: str):
+def write(path, content):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
 
@@ -255,7 +279,7 @@ def main():
     layout_xml = sanitize_layout(layout_raw)
     main_java = sanitize_java(java_raw, pkg)
 
-    # 1. Root Gradle Project Configuration
+    # 1. Gradle Project Settings
     write(ROOT / "settings.gradle", (
         "pluginManagement {\n"
         "    repositories {\n"
@@ -287,7 +311,7 @@ def main():
         "android.nonTransitiveRClass=true\n"
     ))
 
-    # 2. App Module Configuration
+    # 2. App Module Build Configuration
     write(ROOT / "app" / "build.gradle", (
         "plugins { id 'com.android.application' }\n\n"
         "android {\n"
@@ -313,41 +337,19 @@ def main():
         "}\n"
     ))
 
-    # 3. AndroidManifest.xml (Murni dari Base64, byte ke-0 '<')
+    # 3. AndroidManifest.xml
     write(ROOT / "app" / "src" / "main" / "AndroidManifest.xml", MANIFEST_TEMPLATE)
 
     # 4. Resources
-    write(ROOT / "app" / "src" / "main" / "res" / "values" / "strings.xml", (
-        '\x3c?xml version="1.0" encoding="utf-8"?>\n'
-        '\x3cresources>\n'
-        f'    \x3cstring name="app_name">{safe_app_name}\x3c/string>\n'
-        '\x3c/resources>\n'
-    ))
-
-    write(ROOT / "app" / "src" / "main" / "res" / "values" / "colors.xml", (
-        '\x3c?xml version="1.0" encoding="utf-8"?>\n'
-        '\x3cresources>\n'
-        '    \x3ccolor name="black">#FF000000\x3c/color>\n'
-        '    \x3ccolor name="white">#FFFFFFFF\x3c/color>\n'
-        '\x3c/resources>\n'
-    ))
-
-    write(ROOT / "app" / "src" / "main" / "res" / "drawable" / "ic_launcher.xml", (
-        '\x3c?xml version="1.0" encoding="utf-8"?>\n'
-        '\x3cvector xmlns:android="http://schemas.android.com/apk/res/android"\n'
-        '    android:width="108dp"\n'
-        '    android:height="108dp"\n'
-        '    android:viewportWidth="108"\n'
-        '    android:viewportHeight="108">\n'
-        '    \x3cpath\n'
-        '        android:fillColor="#008577"\n'
-        '        android:pathData="M0,0h108v108h-108z"/>\n'
-        '    \x3cpath\n'
-        '        android:fillColor="#FFFFFF"\n'
-        '        android:pathData="M54,20L74,40H60V74H48V40H34L54,20Z"/>\n'
-        '\x3c/vector>\n'
-    ))
-
+    strings_content = (
+        LT + '?xml version="1.0" encoding="utf-8"?>\n'
+        + LT + 'resources>\n'
+        + f'    {LT}string name="app_name">{safe_app_name}{LT}/string>\n'
+        + LT + '/resources>\n'
+    )
+    write(ROOT / "app" / "src" / "main" / "res" / "values" / "strings.xml", strings_content)
+    write(ROOT / "app" / "src" / "main" / "res" / "values" / "colors.xml", COLORS_XML)
+    write(ROOT / "app" / "src" / "main" / "res" / "drawable" / "ic_launcher.xml", IC_LAUNCHER_XML)
     write(ROOT / "app" / "src" / "main" / "res" / "layout" / "activity_main.xml", layout_xml)
 
     # 5. Java Source File
