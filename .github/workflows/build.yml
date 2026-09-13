@@ -35,7 +35,11 @@ jobs:
       - name: Install Python Dependencies
         run: pip install pillow requests --quiet
 
-      # Buat payload.json
+      # 1. Bersihkan sisa file lama agar tidak ada tumpang tindih
+      - name: Clean Old Build Files
+        run: rm -rf app project build_output.log payload.json
+
+      # 2. Siapkan payload.json untuk generator
       - name: Create payload.json
         shell: python
         env:
@@ -63,19 +67,18 @@ jobs:
           with open("payload.json", "w", encoding="utf-8") as f:
               json.dump(data, f, ensure_ascii=False, indent=2)
 
-      # Eksekusi generator Python murni (menulis Manifest, Layout, Java, & Gradle)
+      # 3. Jalankan generator proyek Python murni
       - name: Run Project Generator
-        run: |
-          if [ -f "generate_project.py" ]; then
-            python3 generate_project.py
-          elif [ -f ".github/workflows/generate_project.py" ]; then
-            python3 .github/workflows/generate_project.py
-          else
-            echo "ERROR: generate_project.py tidak ditemukan!"
-            exit 1
-          fi
+        run: python3 generate_project.py
 
-      # Kompilasi Gradle langsung di direktori utama
+      # 4. Validasi visual Manifest di log sebelum kompilasi
+      - name: Verify AndroidManifest
+        run: |
+          echo "=== CEK 5 BARIS PERTAMA MANIFEST ==="
+          head -n 5 app/src/main/AndroidManifest.xml
+          echo "====================================="
+
+      # 5. Kompilasi APK dengan Gradle
       - name: Build APK with Gradle
         run: |
           gradle wrapper --gradle-version 8.7
@@ -83,7 +86,7 @@ jobs:
           set -o pipefail
           ./gradlew assembleDebug -Pandroid.useAndroidX=true -Pandroid.enableJetifier=true --stacktrace 2>&1 | tee build_output.log
 
-      # Kirim file APK ke Telegram
+      # 6. Kirim APK ke Telegram
       - name: Send APK to Telegram
         if: success()
         shell: python
@@ -99,12 +102,12 @@ jobs:
           title = os.environ.get("APP_TITLE", "Aplikasi").strip() or "Aplikasi"
 
           if not token or not chat_id:
-              print("Pengiriman Telegram dilewati (uji coba web / token tidak disetel).")
+              print("Pengiriman Telegram dilewati (pengujian manual web / token kosong).")
               exit(0)
 
           apk_files = glob.glob("app/build/outputs/apk/debug/*.apk")
           if not apk_files:
-              print("ERROR: File APK tidak ditemukan di app/build/outputs/apk/debug/!")
+              print("ERROR: File APK tidak ditemukan di folder app/build/outputs/apk/debug/!")
               exit(1)
 
           original_apk = apk_files[0]
@@ -132,7 +135,7 @@ jobs:
 
           print(f"✅ APK {new_file_name} berhasil dikirim ke Telegram!")
 
-      # Kirim notifikasi error jika gagal
+      # 7. Kirim log error ke Telegram jika kompilasi gagal
       - name: Notify Failure to Telegram
         if: failure()
         shell: python
