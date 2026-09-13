@@ -149,7 +149,7 @@ jobs:
               f.write(j_code)
 
           # ==========================================
-          # 2. SANITASI & VALIDASI LAYOUT XML (ANTI-KOSONG)
+          # 2. SANITASI & VALIDASI LAYOUT XML (ANTI-KOSONG & AUTO-FIX ID)
           # ==========================================
           fallback_xml = """
           
@@ -165,8 +165,11 @@ jobs:
           if x_code.startswith("\ufeff"):
               x_code = x_code[1:]
 
-          # Escape karakter & mentah
+          # 1. Escape simbol & mentah
           x_code = re.sub(r'&(?!(amp|lt|gt|quot|apos);)', '&', x_code)
+
+          # 2. Perbaiki ID tanpa @+id/ (contoh: android:id="btn" -> android:id="@+id/btn")
+          x_code = re.sub(r'android:id="(?!(?:@\+id/|@id/))([^"]+)"', r'android:id="@+id/\1"', x_code)
 
           is_valid_xml = False
           if len(x_code) >= 30:
