@@ -99,7 +99,7 @@ jobs:
           }
           EOF
 
-          # 5. AndroidManifest.xml (Ditulis via Base64 bersih)
+          # 5. AndroidManifest.xml
           echo "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPG1hbmlmZXN0IHhtbG5zOmFuZHJvaWQ9Imh0dHA6Ly9zY2hlbWFzLmFuZHJvaWQuY29tL2Fway9yZXMvYW5kcm9pZCI+CiAgICA8YXBwbGljYXRpb24KICAgICAgICBhbmRyb2lkOmFsbG93QmFja3VwPSJ0cnVlIgogICAgICAgIGFuZHJvaWQ6aWNvbj0iQGRyYXdhYmxlL2ljX2xhdW5jaGVyIgogICAgICAgIGFuZHJvaWQ6cm91bmRJY29uPSJAZHJhd2FibGUvaWNfbGF1bmNoZXIiCiAgICAgICAgYW5kcm9pZDpsYWJlbD0iRHluYW1pY0FwcCIKICAgICAgICBhbmRyb2lkOnN1cHBvcnRzUnRsPSJ0cnVlIgogICAgICAgIGFuZHJvaWQ6dGhlbWU9IkBzdHlsZS9UaGVtZS5NYXRlcmlhbENvbXBvbmVudHMuRGF5TmlnaHQuRGFya0FjdGlvbkJhciI+CiAgICAgICAgPGFjdGl2aXR5CiAgICAgICAgICAgIGFuZHJvaWQ6bmFtZT0iLk1haW5BY3Rpdml0eSIKICAgICAgICAgICAgYW5kcm9pZDpleHBvcnRlZD0idHJ1ZSI+CiAgICAgICAgICAgIDxpbnRlbnQtZmlsdGVyPgogICAgICAgICAgICAgICAgPGFjdGlvbiBhbmRyb2lkOm5hbWU9ImFuZHJvaWQuaW50ZW50LmFjdGlvbi5NQUlOIiAvPgogICAgICAgICAgICAgICAgPGNhdGVnb3J5IGFuZHJvaWQ6bmFtZT0iYW5kcm9pZC5pbnRlbnQuY2F0ZWdvcnkuTEFVTkNIRVIiIC8+CiAgICAgICAgICAgIDwvaW50ZW50LWZpbHRlcj4KICAgICAgICA8L2FjdGl2aXR5PgogICAgPC9hcHBsaWNhdGlvbj4KPC9tYW5pZmVzdD4=" | base64 -d > app/src/main/AndroidManifest.xml
 
       - name: Inject Dynamic App Code, Themed Icon & Sanitize via Python
@@ -120,10 +120,15 @@ jobs:
           title = data.get("app_name", "DynamicApp").strip()
 
           # ==========================================
-          # 1. TULIS JAVA & SUNTIKKAN AUTO-IMPORT
+          # 1. SANITASI & PERBAIKAN STRING LITERAL JAVA
           # ==========================================
           j_b64 = data.get("java_code_b64", "")
           j_code = base64.b64decode(j_b64).decode("utf-8", "ignore")
+
+          # Perbaiki baris terpotong karena newline liar dalam string literal: "\n -> direkatkan
+          j_code = re.sub(r'"\s*\n\s*', '" + "', j_code)
+          # Perbaiki unescaped backslash di ujung baris
+          j_code = re.sub(r'\\(\s*\n)', r'\\n\1', j_code)
 
           auto_imports = """package com.stb.dynamicapp;
 
@@ -149,7 +154,7 @@ jobs:
               f.write(j_code)
 
           # ==========================================
-          # 2. SANITASI & VALIDASI LAYOUT XML (ANTI-KOSONG & AUTO-FIX ID)
+          # 2. SANITASI & VALIDASI LAYOUT XML (AUTO-FIX ID)
           # ==========================================
           fallback_xml = """
           
@@ -165,10 +170,9 @@ jobs:
           if x_code.startswith("\ufeff"):
               x_code = x_code[1:]
 
-          # 1. Escape simbol & mentah
+          # Escape simbol & mentah
           x_code = re.sub(r'&(?!(amp|lt|gt|quot|apos);)', '&', x_code)
-
-          # 2. Perbaiki ID tanpa @+id/ (contoh: android:id="btn" -> android:id="@+id/btn")
+          # Auto-fix ID tanpa @+id/
           x_code = re.sub(r'android:id="(?!(?:@\+id/|@id/))([^"]+)"', r'android:id="@+id/\1"', x_code)
 
           is_valid_xml = False
@@ -177,7 +181,7 @@ jobs:
                   ET.fromstring(x_code)
                   is_valid_xml = True
               except Exception as err:
-                  print(f"[WARN] Sintaks XML rusak ({err}). Menggunakan fallback layout.")
+                  print(f"[WARN] XML rusak ({err}). Menggunakan fallback.")
 
           final_xml = x_code if is_valid_xml else fallback_xml
 
@@ -185,7 +189,7 @@ jobs:
               f.write(final_xml)
 
           # ==========================================
-          # 3. BUAT IKON LAUNCHER TEMATIK HD
+          # 3. GENERATE THEMED ICON HD
           # ==========================================
           title_lower = title.lower()
           if any(k in title_lower for k in ["gym", "workout", "fitness", "dumbel", "dumbbell", "katrol", "pulley", "otot"]):
