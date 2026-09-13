@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 Generate Android native project (Java + XML) dari payload.json.
-Bulletproof: Anti-HTML-stripping, tanpa type-hint arrow, root direktori utama,
-package sinkron, manifest bersih tanpa spasi prolog.
+Bulletproof: Resource XML via Base64 murni, package sinkron, auto-fix XML,
+auto-escape Java literal, bebas tag liar di strings.xml.
 """
 import base64
 import json
@@ -15,7 +15,7 @@ import xml.etree.ElementTree as ET
 ROOT = pathlib.Path(".")
 PAYLOAD = pathlib.Path("payload.json")
 PKG_NAME = "com.stb.dynamicapp"
-LT = chr(60)  # Karakter '<' aman dari pemotongan HTML clipboard
+LT = chr(60)
 
 
 def die(msg, code=2):
@@ -34,7 +34,7 @@ def safe_get(d, key, default=None):
     return v
 
 
-# Template XML Base64 (100% kebal stripping clipboard)
+# 1. Fallback Layout (Base64)
 FALLBACK_LAYOUT = base64.b64decode(
     "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4K"
     "PExpbmVhckxheW91dCB4bWxuczphbmRyb2lkPSJodHRwOi8vc2No"
@@ -59,6 +59,7 @@ FALLBACK_LAYOUT = base64.b64decode(
     "dFNpemU9IjE2c3AiIC8+CjwvTGluZWFyTGF5b3V0Pgo="
 ).decode("utf-8")
 
+# 2. Manifest (Base64)
 MANIFEST_TEMPLATE = base64.b64decode(
     "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4K"
     "PG1hbmlmZXN0IHhtbG5zOmFuZHJvaWQ9Imh0dHA6Ly9zY2hlbWFz"
@@ -81,6 +82,7 @@ MANIFEST_TEMPLATE = base64.b64decode(
     "Pgo="
 ).decode("utf-8")
 
+# 3. Colors XML (Base64 murni - tanpa karakter non-breaking space)
 COLORS_XML = base64.b64decode(
     "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4K"
     "PHJlc291cmNlcz4KICAgIDxjb2xvciBuYW1lPSJibGFjayI+I0ZG"
@@ -88,6 +90,14 @@ COLORS_XML = base64.b64decode(
     "I0ZGRkZGRkZGRjwvY29sb3I+CjwvcmVzb3VyY2VzPgo="
 ).decode("utf-8")
 
+# 4. Strings XML Template (Base64)
+STRINGS_XML_TEMPLATE = base64.b64decode(
+    "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4K"
+    "PHJlc291cmNlcz4KICAgIDxzdHJpbmcgbmFtZT0iYXBwX25hbWUi"
+    "Pl9fQVBQX05BTUVfXzwvc3RyaW5nPgo8L3Jlc291cmNlcz4K"
+).decode("utf-8")
+
+# 5. Launcher Icon (Base64)
 IC_LAUNCHER_XML = base64.b64decode(
     "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4K"
     "PHZlY3RvciB4bWxuczphbmRyb2lkPSJodHRwOi8vc2NoZW1hcy5h"
@@ -269,8 +279,17 @@ def main():
     except Exception as e:
         die(f"payload.json bukan format JSON valid: {e}")
 
-    app_name = safe_get(data, "app_name", "DynamicApp")
-    safe_app_name = app_name.replace("&", "&").replace("'", "\\'")
+    # Bersihkan nama aplikasi: buang semua tag HTML/XML
+    raw_name = safe_get(data, "app_name", "DynamicApp")
+    clean_app_name = re.sub(r"<[^>]+>", "", raw_name)
+    clean_app_name = (
+        clean_app_name.replace("&", "&")
+        .replace("'", "\\'")
+        .replace('"', '\\"')
+        .strip()
+    )
+    if not clean_app_name:
+        clean_app_name = "DynamicApp"
 
     layout_raw = safe_get(data, "activity_main_xml", "")
     java_raw = safe_get(data, "main_activity_java", "")
@@ -279,7 +298,7 @@ def main():
     layout_xml = sanitize_layout(layout_raw)
     main_java = sanitize_java(java_raw, pkg)
 
-    # 1. Gradle Project Settings
+    # 1. Gradle Project Configuration
     write(ROOT / "settings.gradle", (
         "pluginManagement {\n"
         "    repositories {\n"
@@ -311,7 +330,7 @@ def main():
         "android.nonTransitiveRClass=true\n"
     ))
 
-    # 2. App Module Build Configuration
+    # 2. App Module Configuration
     write(ROOT / "app" / "build.gradle", (
         "plugins { id 'com.android.application' }\n\n"
         "android {\n"
@@ -341,12 +360,7 @@ def main():
     write(ROOT / "app" / "src" / "main" / "AndroidManifest.xml", MANIFEST_TEMPLATE)
 
     # 4. Resources
-    strings_content = (
-        LT + '?xml version="1.0" encoding="utf-8"?>\n'
-        + LT + 'resources>\n'
-        + f'    {LT}string name="app_name">{safe_app_name}{LT}/string>\n'
-        + LT + '/resources>\n'
-    )
+    strings_content = STRINGS_XML_TEMPLATE.replace("__APP_NAME__", clean_app_name)
     write(ROOT / "app" / "src" / "main" / "res" / "values" / "strings.xml", strings_content)
     write(ROOT / "app" / "src" / "main" / "res" / "values" / "colors.xml", COLORS_XML)
     write(ROOT / "app" / "src" / "main" / "res" / "drawable" / "ic_launcher.xml", IC_LAUNCHER_XML)
