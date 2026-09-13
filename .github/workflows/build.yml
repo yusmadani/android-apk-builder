@@ -21,10 +21,15 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Python Dependencies
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Python Libraries
         run: pip install pillow requests --quiet
 
-      - name: Scaffold Project and Inject Code (Pure Python Runner)
+      - name: Generate Project, Manifest, and Sanitize Code
         shell: python
         env:
           PAYLOAD_DATA: ${{ toJson(github.event.client_payload) }}
@@ -38,7 +43,7 @@ jobs:
           import xml.etree.ElementTree as ET
           from PIL import Image, ImageDraw
 
-          # 1. Buat folder struktur proyek
+          # 1. Siapkan folder proyek
           os.makedirs("app/src/main/java/com/stb/dynamicapp", exist_ok=True)
           os.makedirs("app/src/main/res/layout", exist_ok=True)
           os.makedirs("app/src/main/res/drawable", exist_ok=True)
@@ -47,17 +52,17 @@ jobs:
           if os.path.exists("app/src/main/res/values"):
               shutil.rmtree("app/src/main/res/values")
 
-          # 2. Tulis file konfigurasi Gradle
-          gradle_properties = (
+          # 2. File konfigurasi Gradle
+          gradle_props = (
               "android.useAndroidX=true\n"
               "android.enableJetifier=true\n"
               "android.nonTransitiveRClass=true\n"
               "org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8\n"
           )
           with open("gradle.properties", "w", encoding="utf-8") as f:
-              f.write(gradle_properties)
+              f.write(gradle_props)
           with open("app/gradle.properties", "w", encoding="utf-8") as f:
-              f.write(gradle_properties)
+              f.write(gradle_props)
 
           settings_gradle = (
               "pluginManagement {\n"
@@ -115,28 +120,28 @@ jobs:
           with open("app/build.gradle", "w", encoding="utf-8") as f:
               f.write(app_build_gradle)
 
-          # 3. Parse Payload dari Bot Telegram
+          # 3. Ekstraksi Payload Bot
           raw_payload = os.environ.get("PAYLOAD_DATA", "{}")
           data = json.loads(raw_payload)
           title = data.get("app_name", "DynamicApp").strip()
           clean_title = re.sub(r'[^a-zA-Z0-9 ]', '', title).strip()[:25] or "HomeGymTracker"
 
-          # 4. Tulis AndroidManifest.xml (Bersih kolom 1 baris 1 & tema anti-crash)
-          manifest_content = (
-              '\n'
-              '\n'
-              '    \n'
-              '        \n'
-              '            \n'
-              '                \n'
-              '                \n'
-              '            \n'
-              '        \n'
-              '    \n'
-              '\n'
-          )
+          # 4. Tulis AndroidManifest.xml (Byte ke-0 wajib '<', tema native anti force-close)
+          manifest_lines = [
+              '',
+              '',
+              '    ',
+              '        ',
+              '            ',
+              '                ',
+              '                ',
+              '            ',
+              '        ',
+              '    ',
+              ''
+          ]
           with open("app/src/main/AndroidManifest.xml", "w", encoding="utf-8") as f:
-              f.write(manifest_content)
+              f.write("\n".join(manifest_lines) + "\n")
 
           # 5. Tulis MainActivity.java (Sanitasi string literal & auto-import)
           j_b64 = data.get("java_code_b64", "")
@@ -170,8 +175,8 @@ jobs:
           with open("app/src/main/java/com/stb/dynamicapp/MainActivity.java", "w", encoding="utf-8") as f:
               f.write(j_code)
 
-          # 6. Tulis Layout XML (Validasi anti-kosong & auto-fix ID)
-          robust_default_xml = (
+          # 6. Tulis Layout XML (Sanitasi & Validasi Anti-Kosong)
+          fallback_xml = (
               '\n'
               '\n'
               '    \n'
@@ -182,7 +187,7 @@ jobs:
               '        \n'
               '        \n'
               '    \n'
-              '\n'
+              ''
           )
 
           x_b64 = data.get("xml_code_b64", "")
@@ -202,10 +207,10 @@ jobs:
               except Exception:
                   is_valid = False
 
-          final_xml = x_code if is_valid else robust_default_xml
+          final_xml = x_code if is_valid else fallback_xml
           xml_path = "app/src/main/res/layout/activity_main.xml"
           with open(xml_path, "w", encoding="utf-8") as f:
-              f.write(final_xml.strip() + "\n")
+              f.write(final_xml.lstrip() + "\n")
 
           # 7. Generate Ikon Tematik HD
           title_lower = title.lower()
@@ -248,6 +253,8 @@ jobs:
               draw.ellipse([322, 250, 412, 380], fill=white)
               draw.rounded_rectangle([165, 220, 185, 290], radius=4, fill=bg_color)
               draw.rounded_rectangle([150, 235, 200, 275], radius=4, fill=bg_color)
+              draw.ellipse([335, 225, 355, 245], fill=(244, 67, 54, 255))
+              draw.ellipse([335, 265, 355, 285], fill=(76, 175, 80, 255))
           else:
               pts = []
               for i in range(10):
@@ -260,7 +267,7 @@ jobs:
           icon_final = img.resize((192, 192), Image.LANCZOS)
           icon_final.save("app/src/main/res/drawable/ic_launcher.png", "PNG")
           icon_final.save("app/src/main/res/mipmap/ic_launcher.png", "PNG")
-          print("Setup file, XML, dan Ikon berhasil dibuat tanpa kendala.")
+          print("Setup file, XML, dan Ikon berhasil dibuat.")
 
       - name: Setup Gradle Wrapper and Build APK
         run: |
@@ -315,7 +322,7 @@ jobs:
               r = requests.post(url, data=payload, files=files, timeout=90)
 
           if not r.json().get("ok"):
-              print(f"Telegram menolak pengiriman file: {r.text}")
+              print(f"Telegram menolak pengiriman: {r.text}")
               exit(1)
 
           print(f"✅ APK {new_file_name} berhasil dikirim ke Telegram!")
