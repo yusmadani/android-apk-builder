@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 Generate Android native project (Java + XML) dari payload.json.
-Mendukung auto-decode Base64 dari STB (xml_code_b64 & java_code_b64),
-package dinamis anti-bentrok, dan proteksi anti-stripping browser.
+Kebal 100% dari HTML stripping: Tanpa simbol sudut mentah,
+template via Base64, dan auto-decode payload STB (xml_code_b64 & java_code_b64).
 """
 import base64
 import json
@@ -15,9 +15,6 @@ import xml.etree.ElementTree as ET
 ROOT = pathlib.Path(".")
 PAYLOAD = pathlib.Path("payload.json")
 
-LT = chr(60)  # Simbol '<'
-GT = chr(62)  # Simbol '>'
-
 
 def die(msg, code=2):
     print(f"[FATAL] {msg}", file=sys.stderr)
@@ -25,7 +22,6 @@ def die(msg, code=2):
 
 
 def safe_get(d, keys, default=""):
-    """Membaca string biasa dari daftar kemungkinan nama key."""
     if not isinstance(d, dict):
         return default
     if isinstance(keys, str):
@@ -38,75 +34,104 @@ def safe_get(d, keys, default=""):
 
 
 def get_code_payload(d, b64_keys, plain_keys):
-    """Membaca kode baik dalam format Base64 maupun teks biasa."""
+    """Membaca dan mendekode payload baik format Base64 maupun plain text."""
     if not isinstance(d, dict):
         return ""
 
-    # 1. Cek key Base64 terlebih dahulu
-    if isinstance(b64_keys, str):
-        b64_keys = [b64_keys]
     for k in b64_keys:
-        raw = d.get(k)
-        if raw and isinstance(raw, str) and raw.strip():
+        val = d.get(k)
+        if val and isinstance(val, str) and val.strip():
             try:
-                decoded = base64.b64decode(raw.strip()).decode("utf-8", errors="ignore")
-                if decoded.strip():
-                    return decoded.strip()
+                dec = base64.b64decode(val.strip()).decode("utf-8", errors="ignore")
+                if dec.strip():
+                    return dec.strip()
             except Exception as e:
-                print(f"[WARN] Gagal decode Base64 pada key '{k}': {e}", file=sys.stderr)
+                print(f"[WARN] Gagal decode Base64 '{k}': {e}", file=sys.stderr)
 
-    # 2. Cek key plain text biasa
-    if isinstance(plain_keys, str):
-        plain_keys = [plain_keys]
     for k in plain_keys:
-        raw = d.get(k)
-        if raw and isinstance(raw, str) and raw.strip():
-            raw_str = raw.strip()
-            # Antisipasi jika isi plain_keys ternyata juga Base64
-            if "<" not in raw_str and " " not in raw_str and len(raw_str) % 4 == 0 and len(raw_str) > 50:
+        val = d.get(k)
+        if val and isinstance(val, str) and val.strip():
+            s = val.strip()
+            if len(s) not in range(50) and " " not in s and len(s) % 4 == 0:
                 try:
-                    decoded = base64.b64decode(raw_str).decode("utf-8", errors="ignore")
-                    if "\n\n'
-    + '    ' + LT + 'TextView\n'
-    + '        android:id="@+id/tvTitle"\n'
-    + '        android:layout_width="wrap_content"\n'
-    + '        android:layout_height="wrap_content"\n'
-    + '        android:text="@string/app_name"\n'
-    + '        android:textSize="22sp"\n'
-    + '        android:textStyle="bold" /' + GT + '\n\n'
-    + '    ' + LT + 'TextView\n'
-    + '        android:id="@+id/tvMessage"\n'
-    + '        android:layout_width="wrap_content"\n'
-    + '        android:layout_height="wrap_content"\n'
-    + '        android:layout_marginTop="12dp"\n'
-    + '        android:text="Aplikasi berhasil dibangun."\n'
-    + '        android:textSize="16sp" /' + GT + '\n\n'
-    + LT + '/LinearLayout' + GT + '\n'
-)
+                    dec = base64.b64decode(s).decode("utf-8", errors="ignore")
+                    if "package " in dec or "class " in dec or chr(60) in dec:
+                        return dec.strip()
+                except Exception:
+                    pass
+            return s
 
-COLORS_XML = (
-    LT + '?xml version="1.0" encoding="utf-8"?' + GT + '\n'
-    + LT + 'resources' + GT + '\n'
-    + '    ' + LT + 'color name="black"' + GT + '#FF000000' + LT + '/color' + GT + '\n'
-    + '    ' + LT + 'color name="white"' + GT + '#FFFFFFFF' + LT + '/color' + GT + '\n'
-    + LT + '/resources' + GT + '\n'
-)
+    return ""
 
-IC_LAUNCHER_XML = (
-    LT + '?xml version="1.0" encoding="utf-8"?' + GT + '\n'
-    + LT + 'vector xmlns:android="http://schemas.android.com/apk/res/android"\n'
-    + '    android:width="108dp"\n'
-    + '    android:height="108dp"\n'
-    + '    android:viewportWidth="108"\n'
-    + '    android:viewportHeight="108"' + GT + '\n'
-    + '    ' + LT + 'path\n'
-    + '        android:fillColor="#008577"\n'
-    + '        android:pathData="M0,0h108v108h-108z"/' + GT + '\n'
-    + '    ' + LT + 'path\n'
-    + '        android:fillColor="#FFFFFF"\n'
-    + '        android:pathData="M54,20L74,40H60V74H48V40H34L54,20Z"/' + GT + '\n'
-    + LT + '/vector' + GT + '\n'
-)
+
+# Template Resource via Base64 (Aman dari pemotongan HTML peramban)
+FALLBACK_LAYOUT = base64.b64decode(
+    "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4K"
+    "PExpbmVhckxheW91dCB4bWxuczphbmRyb2lkPSJodHRwOi8vc2No"
+    "ZW1hcy5hbmRyb2lkLmNvbS9hcGsvcmVzL2FuZHJvaWQiCiAgICBh"
+    "bmRyb2lkOmxheW91dF93aWR0aD0ibWF0Y2hfcGFyZW50IgogICAg"
+    "YW5kcm9pZDpsYXlvdXRfaGVpZ2h0PSJtYXRjaF9wYXJlbnQiCiAg"
+    "ICBhbmRyb2lkOm9yaWVudGF0aW9uPSJ2ZXJ0aWNhbCIKICAgIGFu"
+    "ZHJvaWQ6Z3Jhdml0eT0iY2VudGVyIgogICAgYW5kcm9pZDpwYWRk"
+    "aW5nPSIyNGRwIj4KICAgIDxUZXh0VmlldwogICAgICAgIGFuZHJv"
+    "aWQ6aWQ9IkAraWQvdHZUaXRsZSIKICAgICAgICBhbmRyb2lkOmxh"
+    "eW91dF93aWR0aD0id3JhcF9jb250ZW50IgogICAgICAgIGFuZHJv"
+    "aWQ6bGF5b3V0X2hlaWdodD0id3JhcF9jb250ZW50IgogICAgICAg"
+    "IGFuZHJvaWQ6dGV4dD0iQHN0cmluZy9hcHBfbmFtZSIKICAgICAg"
+    "ICBhbmRyb2lkOnRleHRTaXplPSIyMnNwIgogICAgICAgIGFuZHJv"
+    "aWQ6dGV4dFN0eWxlPSJib2xkIiAvPgoKICAgIDxUZXh0Vmlldwog"
+    "ICAgICAgIGFuZHJvaWQ6aWQ9IkAraWQvdHZNZXNzYWdlIgogICAg"
+    "ICAgIGFuZHJvaWQ6bGF5b3V0X3dpZHRoPSJ3cmFwX2NvbnRlbnQi"
+    "CiAgICAgICAgYW5kcm9pZDpsYXlvdXRfaGVpZ2h0PSJ3cmFwX2Nv"
+    "bnRlbnQiCiAgICAgICAgYW5kcm9pZDpsYXlvdXRfbWFyZ2luVG9w"
+    "PSIxMmRwIgogICAgICAgIGFuZHJvaWQ6dGV4dD0iQXBsaWthc2kg"
+    "YmVyaGFzaWwgZGliYW5ndW4uIgogICAgICAgIGFuZHJvaWQ6dGV4"
+    "dFNpemU9IjE2c3AiIC8+CjwvTGluZWFyTGF5b3V0Pgo="
+).decode("utf-8")
+
+MANIFEST_TEMPLATE = base64.b64decode(
+    "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4K"
+    "PG1hbmlmZXN0IHhtbG5zOmFuZHJvaWQ9Imh0dHA6Ly9zY2hlbWFz"
+    "LmFuZHJvaWQuY29tL2Fway9yZXMvYW5kcm9pZCI+CiAgICA8YXBw"
+    "bGljYXRpb24KICAgICAgICBhbmRyb2lkOmFsbG93QmFja3VwPSJ0"
+    "cnVlIgogICAgICAgIGFuZHJvaWQ6aWNvbj0iQGRyYXdhYmxlL2lj"
+    "X2xhdW5jaGVyIgogICAgICAgIGFuZHJvaWQ6bGFiZWw9IkBzdHJp"
+    "bmcvYXBwX25hbWUiCiAgICAgICAgYW5kcm9pZDpzdXBwb3J0c1J0"
+    "bD0idHJ1ZSIKICAgICAgICBhbmRyb2lkOnRoZW1lPSJAYW5kcm9p"
+    "ZDpzdHlsZS9UaGVtZS5EZXZpY2VEZWZhdWx0Lk5vQWN0aW9uQmFy"
+    "Ij4KICAgICAgICA8YWN0aXZpdHkKICAgICAgICAgICAgYW5kcm9p"
+    "ZDpuYW1lPSIuTWFpbkFjdGl2aXR5IgogICAgICAgICAgICBhbmRy"
+    "b2lkOmV4cG9ydGVkPSJ0cnVlIj4KICAgICAgICAgICAgPGludGVu"
+    "dC1maWx0ZXI+CiAgICAgICAgICAgICAgICA8YWN0aW9uIGFuZHJv"
+    "aWQ6bmFtZT0iYW5kcm9pZC5pbnRlbnQuYWN0aW9uLk1BSU4iIC8+"
+    "CiAgICAgICAgICAgICAgICA8Y2F0ZWdvcnkgYW5kcm9pZDpuYW1l"
+    "PSJhbmRyb2lkLmludGVudC5jYXRlZ29yeS5MQVVOQ0hFUiIgLz4K"
+    "ICAgICAgICAgICAgPC9pbnRlbnQtZmlsdGVyPgogICAgICAgIDwv"
+    "YWN0aXZpdHk+CiAgICA8L2FwcGxpY2F0aW9uPgo8L21hbmlmZXN0"
+    "Pgo="
+).decode("utf-8")
+
+COLORS_XML = base64.b64decode(
+    "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4K"
+    "PHJlc291cmNlcz4KICAgIDxjb2xvciBuYW1lPSJibGFjayI+I0ZG"
+    "MDAwMDAwPC9jb2xvcj4KICAgIDxjb2xvciBuYW1lPSJ3aGl0ZSI+"
+    "I0ZGRkZGRkZGRjwvY29sb3I+CjwvcmVzb3VyY2VzPgo="
+).decode("utf-8")
+
+IC_LAUNCHER_XML = base64.b64decode(
+    "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4K"
+    "PHZlY3RvciB4bWxuczphbmRyb2lkPSJodHRwOi8vc2NoZW1hcy5h"
+    "bmRyb2lkLmNvbS9hcGsvcmVzL2FuZHJvaWQiCiAgICBhbmRyb2lk"
+    "OndpZHRoPSIxMDhkcCIKICAgIGFuZHJvaWQ6aGVpZ2h0PSIxMDhk"
+    "cCIKICAgIGFuZHJvaWQ6dmlld3BvcnRXaWR0aD0iMTA4IgogICAg"
+    "YW5kcm9pZDp2aWV3cG9ydEhlaWdodD0iMTA4Ij4KICAgIDxwYXRo"
+    "CiAgICAgICAgYW5kcm9pZDpmaWxsQ29sb3I9IiMwMDg1NzciCiAg"
+    "ICAgICAgYW5kcm9pZDpwYXRoRGF0YT0iTTAsMGgxMDh2MTA4aC0x"
+    "MDh6Ii8+CiAgICA8cGF0aAogICAgICAgIGFuZHJvaWQ6ZmlsbENv"
+    "bG9yPSIjRkZGRkZGIgogICAgICAgIGFuZHJvaWQ6cGF0aERhdGE9"
+    "Ik01NCwyMEw3NCw0MEg2MFY3NEg0OFY0MEgzNEw1NCwyMFoiLz4K"
+    "PC92ZWN0b3I+Cg=="
+).decode("utf-8")
 
 
 def strip_code_fences(s):
@@ -153,8 +178,8 @@ def ensure_root_xml(xml):
     if not xml:
         return ""
     xml = xml.lstrip("\ufeff \t\r\n")
-    header = LT + '?xml version="1.0" encoding="utf-8"?' + GT + '\n'
-    if not xml.startswith(LT + "?xml"):
+    header = chr(60) + '?xml version="1.0" encoding="utf-8"?' + chr(62) + '\n'
+    if not xml.startswith(chr(60) + "?xml"):
         xml = header + xml
     return xml
 
@@ -171,13 +196,13 @@ def validate_xml(xml):
 def sanitize_layout(raw_xml):
     xml = strip_code_fences(raw_xml)
     xml = ensure_root_xml(xml)
-    if not xml or len(xml.strip()) in range(0, 30):
-        print("[WARN] Kode Layout kosong/terlalu pendek! Memakai fallback template.", file=sys.stderr)
+    if len(xml.strip()) in range(30):
+        print("[WARN] Kode Layout kosong/terlalu pendek! Memakai fallback.", file=sys.stderr)
         return FALLBACK_LAYOUT
     xml = fix_xml_escapes(xml)
     xml = fix_missing_id_prefix(xml)
     if not validate_xml(xml):
-        print("[WARN] Format XML rusak! Memakai fallback template.", file=sys.stderr)
+        print("[WARN] Format XML rusak! Memakai fallback.", file=sys.stderr)
         return FALLBACK_LAYOUT
     return xml
 
@@ -224,7 +249,7 @@ def sanitize_java_strings(java):
 def sanitize_java(raw_java, pkg):
     java = strip_code_fences(raw_java)
     if not java or "class " not in java:
-        print("[WARN] Kode Java kosong/hilang! Memakai MainActivity fallback.", file=sys.stderr)
+        print("[WARN] Kode Java kosong/hilang! Memakai fallback MainActivity.", file=sys.stderr)
         return (
             f"package {pkg};\n\n"
             "import android.app.Activity;\n"
@@ -274,15 +299,12 @@ def main():
     except Exception as e:
         die(f"payload.json bukan format JSON valid: {e}")
 
-    # ========================================================
-    # LOG DEBUG: Mengecek data masuk dari STB
-    # ========================================================
     print("==================================================")
     print("=== ISI PAYLOAD.JSON YANG DITERIMA DARI STB ===")
     print("Daftar Kunci (Keys):", list(data.keys()))
     for k, v in data.items():
         if isinstance(v, str):
-            cuplikan = repr(v[:60]) + ("..." if len(v) > 60 else "")
+            cuplikan = repr(v[:60]) + ("..." if len(v) not in range(61) else "")
             print(f"-> Key '{k}': {len(v)} karakter | {cuplikan}")
         else:
             print(f"-> Key '{k}': {repr(v)}")
@@ -290,23 +312,17 @@ def main():
 
     # 1. Nama Aplikasi
     raw_name = safe_get(data, ["app_name", "title", "name"], "DynamicApp")
-    clean_app_name = re.sub(LT + r"[^" + GT + r"]+" + GT, "", raw_name)
-    clean_app_name = (
-        clean_app_name.replace("&", "&")
-        .replace("'", "\\'")
-        .replace('"', '\\"')
-        .strip()
-    )
+    clean_app_name = re.sub(r"[^\w\s-]", "", raw_name).strip()
     if not clean_app_name:
         clean_app_name = "DynamicApp"
 
     # 2. Package Name Dinamis
     pkg_suffix = re.sub(r"[^a-zA-Z0-9]", "", clean_app_name).lower()
-    if not pkg_suffix or len(pkg_suffix) < 3:
+    if len(pkg_suffix) in range(3):
         pkg_suffix = "dynamicapp"
     pkg = f"com.stb.{pkg_suffix}"
 
-    # 3. Baca & Decode Kode Layout XML dan Java (Mendukung Base64 & Plain)
+    # 3. Baca Kode Layout & Java (Mendukung Base64 STB)
     layout_raw = get_code_payload(
         data,
         b64_keys=["xml_code_b64", "layout_xml_b64", "activity_main_xml_b64", "layout_b64"],
@@ -385,35 +401,15 @@ def main():
         "}\n"
     ))
 
-    # 6. Manifest
-    manifest_content = (
-        LT + '?xml version="1.0" encoding="utf-8"?' + GT + '\n'
-        + LT + 'manifest xmlns:android="http://schemas.android.com/apk/res/android">\n'
-        + '    ' + LT + 'application\n'
-        + '        android:allowBackup="true"\n'
-        + '        android:icon="@drawable/ic_launcher"\n'
-        + '        android:label="@string/app_name"\n'
-        + '        android:supportsRtl="true"\n'
-        + '        android:theme="@android:style/Theme.DeviceDefault.NoActionBar">\n'
-        + '        ' + LT + 'activity\n'
-        + '            android:name=".MainActivity"\n'
-        + '            android:exported="true">\n'
-        + '            ' + LT + 'intent-filter>\n'
-        + '                ' + LT + 'action android:name="android.intent.action.MAIN" /' + GT + '\n'
-        + '                ' + LT + 'category android:name="android.intent.category.LAUNCHER" /' + GT + '\n'
-        + '            ' + LT + '/intent-filter>\n'
-        + '        ' + LT + '/activity>\n'
-        + '    ' + LT + '/application>\n'
-        + LT + '/manifest' + GT + '\n'
-    )
-    write(ROOT / "app" / "src" / "main" / "AndroidManifest.xml", manifest_content)
+    # 6. AndroidManifest.xml
+    write(ROOT / "app" / "src" / "main" / "AndroidManifest.xml", MANIFEST_TEMPLATE)
 
     # 7. Resources & Source Code
     strings_content = (
-        LT + '?xml version="1.0" encoding="utf-8"?' + GT + '\n'
-        + LT + 'resources' + GT + '\n'
-        + '    ' + LT + 'string name="app_name"' + GT + clean_app_name + LT + '/string' + GT + '\n'
-        + LT + '/resources' + GT + '\n'
+        chr(60) + '?xml version="1.0" encoding="utf-8"?' + chr(62) + '\n'
+        + chr(60) + 'resources' + chr(62) + '\n'
+        + '    ' + chr(60) + 'string name="app_name"' + chr(62) + clean_app_name + chr(60) + '/string' + chr(62) + '\n'
+        + chr(60) + '/resources' + chr(62) + '\n'
     )
     write(ROOT / "app" / "src" / "main" / "res" / "values" / "strings.xml", strings_content)
     write(ROOT / "app" / "src" / "main" / "res" / "values" / "colors.xml", COLORS_XML)
