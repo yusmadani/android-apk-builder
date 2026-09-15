@@ -71,12 +71,12 @@ STRINGS_XML_TEMPLATE = base64.b64decode(
     "Pl9fQVBQX05BTUVfXzwvc3RyaW5nPgo8L3Jlc291cmNlcz4K"
 ).decode("utf-8")
 
-# 2. Colors XML (Terkunci via Base64)
+# 2. Colors XML (Terkunci via Base64 - 8 digit hex #FFFFFFFF)
 COLORS_XML = base64.b64decode(
     "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4K"
     "PHJlc291cmNlcz4KICAgIDxjb2xvciBuYW1lPSJibGFjayI+I0ZG"
     "MDAwMDAwPC9jb2xvcj4KICAgIDxjb2xvciBuYW1lPSJ3aGl0ZSI+"
-    "I0ZGRkZGRkZGRjwvY29sb3I+CjwvcmVzb3VyY2VzPgo="
+    "I0ZGRkZGRkZGPC9jb2xvcj4KPC9yZXNvdXJjZXM+Cg=="
 ).decode("utf-8")
 
 # 3. Fallback Layout (Terkunci via Base64)
