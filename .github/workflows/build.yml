@@ -24,8 +24,10 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      # Android SDK sudah ada di runner ubuntu-latest, cukup setujui lisensinya
+      - name: Accept Android SDK Licenses
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
 
       - name: Set up Python 3.10
         uses: actions/setup-python@v5
@@ -53,8 +55,8 @@ jobs:
           try:
               if raw and raw != "null":
                   data = json.loads(raw)
-          except Exception:
-              pass
+          except Exception as e:
+              print(f"Error parsing JSON: {e}")
 
           if not data:
               manual_name = os.environ.get("MANUAL_APP_NAME", "DynamicApp")
@@ -100,7 +102,15 @@ jobs:
           set -o pipefail
           ./gradlew assembleDebug -Pandroid.useAndroidX=true -Pandroid.enableJetifier=true --stacktrace 2>&1 | tee build_output.log
 
-      # 6. Kirim APK ke Telegram jika sukses
+      # 6. Simpan APK ke halaman GitHub Actions (Opsional, agar bisa di-download dari web)
+      - name: Upload APK as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.client_payload.app_name || github.event.inputs.test_app_name || 'app-debug' }}-apk
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 7
+
+      # 7. Kirim APK ke Telegram jika sukses
       - name: Send APK to Telegram
         if: success()
         shell: python
@@ -149,7 +159,7 @@ jobs:
 
           print(f"✅ APK {new_file_name} berhasil dikirim ke Telegram!")
 
-      # 7. Kirim pesan notifikasi error ke Telegram jika build gagal
+      # 8. Kirim pesan notifikasi error ke Telegram jika build gagal
       - name: Notify Failure to Telegram
         if: failure()
         shell: python
