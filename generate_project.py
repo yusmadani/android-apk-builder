@@ -275,6 +275,14 @@ def sanitize_java(raw_java, pkg):
 
     java = sanitize_java_strings(java)
 
+    # ========================================================
+    # TAMBAHAN AUTO-FIX: Memperbaiki kesalahan penulisan method AI
+    # ========================================================
+    java = re.sub(r'setOnbuttonCheckedChangeListener', 'setOnCheckedChangeListener', java, flags=re.IGNORECASE)
+    java = re.sub(r'setOnCheckChangeListener', 'setOnCheckedChangeListener', java, flags=re.IGNORECASE)
+    # ========================================================
+
+    # Sinkronkan nama package
     if re.search(r"package\s+[\w\.]+;", java):
         java = re.sub(r"package\s+[\w\.]+;", f"package {pkg};", java)
     else:
