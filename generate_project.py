@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 Generate Android native project (Java + XML) dari payload.json.
-Kebal 100% dari HTML stripping: Tanpa simbol sudut mentah,
-template via Base64, dan auto-decode payload STB (xml_code_b64 & java_code_b64).
+Kebal 100%: Template XML & strings via Base64 murni (anti-invalid ),
+auto-decode payload STB (xml_code_b64 & java_code_b64), package dinamis unik.
 """
 import base64
 import json
@@ -52,7 +52,7 @@ def get_code_payload(d, b64_keys, plain_keys):
         val = d.get(k)
         if val and isinstance(val, str) and val.strip():
             s = val.strip()
-            if len(s) not in range(50) and " " not in s and len(s) % 4 == 0:
+            if len(s) > 50 and " " not in s and len(s) % 4 == 0:
                 try:
                     dec = base64.b64decode(s).decode("utf-8", errors="ignore")
                     if "package " in dec or "class " in dec or chr(60) in dec:
@@ -64,7 +64,22 @@ def get_code_payload(d, b64_keys, plain_keys):
     return ""
 
 
-# Template Resource via Base64 (Aman dari pemotongan HTML peramban)
+# 1. Strings XML Template (Terkunci via Base64: 100% tag , BUKAN )
+STRINGS_XML_TEMPLATE = base64.b64decode(
+    "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4K"
+    "PHJlc291cmNlcz4KICAgIDxzdHJpbmcgbmFtZT0iYXBwX25hbWUi"
+    "Pl9fQVBQX05BTUVfXzwvc3RyaW5nPgo8L3Jlc291cmNlcz4K"
+).decode("utf-8")
+
+# 2. Colors XML (Terkunci via Base64)
+COLORS_XML = base64.b64decode(
+    "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4K"
+    "PHJlc291cmNlcz4KICAgIDxjb2xvciBuYW1lPSJibGFjayI+I0ZG"
+    "MDAwMDAwPC9jb2xvcj4KICAgIDxjb2xvciBuYW1lPSJ3aGl0ZSI+"
+    "I0ZGRkZGRkZGRjwvY29sb3I+CjwvcmVzb3VyY2VzPgo="
+).decode("utf-8")
+
+# 3. Fallback Layout (Terkunci via Base64)
 FALLBACK_LAYOUT = base64.b64decode(
     "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4K"
     "PExpbmVhckxheW91dCB4bWxuczphbmRyb2lkPSJodHRwOi8vc2No"
@@ -89,6 +104,7 @@ FALLBACK_LAYOUT = base64.b64decode(
     "dFNpemU9IjE2c3AiIC8+CjwvTGluZWFyTGF5b3V0Pgo="
 ).decode("utf-8")
 
+# 4. Manifest Template (Terkunci via Base64)
 MANIFEST_TEMPLATE = base64.b64decode(
     "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4K"
     "PG1hbmlmZXN0IHhtbG5zOmFuZHJvaWQ9Imh0dHA6Ly9zY2hlbWFz"
@@ -111,13 +127,7 @@ MANIFEST_TEMPLATE = base64.b64decode(
     "Pgo="
 ).decode("utf-8")
 
-COLORS_XML = base64.b64decode(
-    "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4K"
-    "PHJlc291cmNlcz4KICAgIDxjb2xvciBuYW1lPSJibGFjayI+I0ZG"
-    "MDAwMDAwPC9jb2xvcj4KICAgIDxjb2xvciBuYW1lPSJ3aGl0ZSI+"
-    "I0ZGRkZGRkZGRjwvY29sb3I+CjwvcmVzb3VyY2VzPgo="
-).decode("utf-8")
-
+# 5. Icon Launcher (Terkunci via Base64)
 IC_LAUNCHER_XML = base64.b64decode(
     "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4K"
     "PHZlY3RvciB4bWxuczphbmRyb2lkPSJodHRwOi8vc2NoZW1hcy5h"
@@ -197,7 +207,7 @@ def sanitize_layout(raw_xml):
     xml = strip_code_fences(raw_xml)
     xml = ensure_root_xml(xml)
     if len(xml.strip()) in range(30):
-        print("[WARN] Kode Layout kosong/terlalu pendek! Memakai fallback.", file=sys.stderr)
+        print("[WARN] Layout kosong/terlalu pendek! Memakai fallback.", file=sys.stderr)
         return FALLBACK_LAYOUT
     xml = fix_xml_escapes(xml)
     xml = fix_missing_id_prefix(xml)
@@ -249,7 +259,7 @@ def sanitize_java_strings(java):
 def sanitize_java(raw_java, pkg):
     java = strip_code_fences(raw_java)
     if not java or "class " not in java:
-        print("[WARN] Kode Java kosong/hilang! Memakai fallback MainActivity.", file=sys.stderr)
+        print("[WARN] Java kosong/hilang! Memakai fallback MainActivity.", file=sys.stderr)
         return (
             f"package {pkg};\n\n"
             "import android.app.Activity;\n"
@@ -304,13 +314,13 @@ def main():
     print("Daftar Kunci (Keys):", list(data.keys()))
     for k, v in data.items():
         if isinstance(v, str):
-            cuplikan = repr(v[:60]) + ("..." if len(v) not in range(61) else "")
+            cuplikan = repr(v[:60]) + ("..." if len(v) > 60 else "")
             print(f"-> Key '{k}': {len(v)} karakter | {cuplikan}")
         else:
             print(f"-> Key '{k}': {repr(v)}")
     print("==================================================")
 
-    # 1. Nama Aplikasi
+    # 1. Bersihkan Nama Aplikasi (Hanya huruf, angka, spasi, dash)
     raw_name = safe_get(data, ["app_name", "title", "name"], "DynamicApp")
     clean_app_name = re.sub(r"[^\w\s-]", "", raw_name).strip()
     if not clean_app_name:
@@ -318,7 +328,7 @@ def main():
 
     # 2. Package Name Dinamis
     pkg_suffix = re.sub(r"[^a-zA-Z0-9]", "", clean_app_name).lower()
-    if len(pkg_suffix) in range(3):
+    if len(pkg_suffix) < 3:
         pkg_suffix = "dynamicapp"
     pkg = f"com.stb.{pkg_suffix}"
 
@@ -343,7 +353,7 @@ def main():
     layout_xml = sanitize_layout(layout_raw)
     main_java = sanitize_java(java_raw, pkg)
 
-    # 4. Pengaturan Root Gradle
+    # 4. Settings & Build Gradle
     write(ROOT / "settings.gradle", (
         "pluginManagement {\n"
         "    repositories {\n"
@@ -404,22 +414,22 @@ def main():
     # 6. AndroidManifest.xml
     write(ROOT / "app" / "src" / "main" / "AndroidManifest.xml", MANIFEST_TEMPLATE)
 
-    # 7. Resources & Source Code
-    strings_content = (
-        chr(60) + '?xml version="1.0" encoding="utf-8"?' + chr(62) + '\n'
-        + chr(60) + 'resources' + chr(62) + '\n'
-        + '    ' + chr(60) + 'string name="app_name"' + chr(62) + clean_app_name + chr(60) + '/string' + chr(62) + '\n'
-        + chr(60) + '/resources' + chr(62) + '\n'
-    )
+    # 7. Resources (strings.xml murni , colors.xml murni )
+    strings_content = STRINGS_XML_TEMPLATE.replace("__APP_NAME__", clean_app_name)
     write(ROOT / "app" / "src" / "main" / "res" / "values" / "strings.xml", strings_content)
     write(ROOT / "app" / "src" / "main" / "res" / "values" / "colors.xml", COLORS_XML)
     write(ROOT / "app" / "src" / "main" / "res" / "drawable" / "ic_launcher.xml", IC_LAUNCHER_XML)
     write(ROOT / "app" / "src" / "main" / "res" / "layout" / "activity_main.xml", layout_xml)
 
+    # 8. Verifikasi Print di Log Runner
+    print("=== CEK ISI STRINGS.XML YANG DIBUAT ===")
+    print(strings_content.strip())
+    print("=======================================")
+
     java_path = ROOT / "app" / "src" / "main" / "java" / pathlib.Path(*pkg.split("."))
     write(java_path / "MainActivity.java", main_java)
 
-    print(f"[OK] Proyek Android {clean_app_name} ({pkg}) berhasil dibangun dengan kode kustom AI!")
+    print(f"[OK] Proyek Android {clean_app_name} ({pkg}) berhasil dibangun!")
 
 
 if __name__ == "__main__":
