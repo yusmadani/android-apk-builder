@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 Generate Android native project (Java + XML) dari payload.json.
-Dinamis: Package ID unik per aplikasi (anti-bentrok di HP),
-multi-key JSON reader (anti-fallback 795KB), tanpa simbol raw stripping.
+Lengkap: Debug log payload, Package ID unik per aplikasi,
+multi-key JSON reader, dan proteksi anti-HTML stripping.
 """
 import json
 import os
@@ -36,7 +36,7 @@ def safe_get(d, keys, default=""):
     return default
 
 
-# Template Layout Darurat
+# Template Layout Darurat jika kode dari AI benar-benar kosong
 FALLBACK_LAYOUT = (
     LT + '?xml version="1.0" encoding="utf-8"?' + GT + '\n'
     + LT + 'LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"\n'
@@ -142,7 +142,7 @@ def validate_xml(xml):
         ET.fromstring(xml)
         return True
     except Exception as e:
-        print(f"[WARN] XML invalid: {e}", file=sys.stderr)
+        print(f"[WARN] Validasi XML gagal: {e}", file=sys.stderr)
         return False
 
 
@@ -155,7 +155,7 @@ def sanitize_layout(raw_xml):
     xml = fix_xml_escapes(xml)
     xml = fix_missing_id_prefix(xml)
     if not validate_xml(xml):
-        print("[WARN] XML layout rusak! Memakai fallback template.", file=sys.stderr)
+        print("[WARN] Format XML rusak! Memakai fallback template.", file=sys.stderr)
         return FALLBACK_LAYOUT
     return xml
 
@@ -218,7 +218,6 @@ def sanitize_java(raw_java, pkg):
 
     java = sanitize_java_strings(java)
 
-    # Sinkronkan nama package
     if re.search(r"package\s+[\w\.]+;", java):
         java = re.sub(r"package\s+[\w\.]+;", f"package {pkg};", java)
     else:
@@ -253,6 +252,21 @@ def main():
     except Exception as e:
         die(f"payload.json bukan format JSON valid: {e}")
 
+    # ========================================================
+    # LOG DEBUG: Memeriksa isi asli data yang dikirim dari STB
+    # ========================================================
+    print("==================================================")
+    print("=== ISI PAYLOAD.JSON YANG DITERIMA DARI STB ===")
+    print("Daftar Kunci (Keys):", list(data.keys()))
+    for k, v in data.items():
+        if isinstance(v, str):
+            cuplikan = repr(v[:60]) + ("..." if len(v) > 60 else "")
+            print(f"-> Key '{k}': {len(v)} karakter | {cuplikan}")
+        else:
+            print(f"-> Key '{k}': {repr(v)}")
+    print("==================================================")
+    # ========================================================
+
     # 1. Bersihkan Nama Aplikasi
     raw_name = safe_get(data, ["app_name", "title", "name"], "DynamicApp")
     clean_app_name = re.sub(LT + r"[^" + GT + r"]+" + GT, "", raw_name)
@@ -265,14 +279,14 @@ def main():
     if not clean_app_name:
         clean_app_name = "DynamicApp"
 
-    # 2. Package Name Dinamis Berdasarkan Nama Aplikasi (Anti-Bentrok)
+    # 2. Package Name Dinamis (Anti-Bentrok saat dipasang di HP)
     pkg_suffix = re.sub(r"[^a-zA-Z0-9]", "", clean_app_name).lower()
     if not pkg_suffix or len(pkg_suffix) < 3:
         pkg_suffix = "dynamicapp"
     pkg = f"com.stb.{pkg_suffix}"
 
-    # 3. Baca Kode Layout & Java (Mendukung Multi-Key dari Bot STB)
-    layout_raw = safe_get(data, ["activity_main_xml", "layout_xml", "layout", "xml"])
+    # 3. Baca Kode Layout & Java (Mendukung Multi-Key)
+    layout_raw = safe_get(data, ["activity_main_xml", "layout_xml", "layout", "xml", "code_xml"])
     java_raw = safe_get(data, ["main_activity_java", "java_code", "main_activity", "java", "code"])
 
     print(f"[*] App Name        : {clean_app_name}")
@@ -340,7 +354,7 @@ def main():
         "}\n"
     ))
 
-    # 5. Manifest (Menggunakan Package Baru)
+    # 5. Manifest
     manifest_content = (
         LT + '?xml version="1.0" encoding="utf-8"?' + GT + '\n'
         + LT + 'manifest xmlns:android="http://schemas.android.com/apk/res/android">\n'
@@ -363,7 +377,7 @@ def main():
     )
     write(ROOT / "app" / "src" / "main" / "AndroidManifest.xml", manifest_content)
 
-    # 6. Resources & Code
+    # 6. Resources & Source Code
     strings_content = (
         LT + '?xml version="1.0" encoding="utf-8"?' + GT + '\n'
         + LT + 'resources' + GT + '\n'
@@ -378,7 +392,7 @@ def main():
     java_path = ROOT / "app" / "src" / "main" / "java" / pathlib.Path(*pkg.split("."))
     write(java_path / "MainActivity.java", main_java)
 
-    print(f"[OK] Proyek Android berhasil dibangun!")
+    print(f"[OK] Proyek Android {clean_app_name} ({pkg}) berhasil dibangun!")
 
 
 if __name__ == "__main__":
