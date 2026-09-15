@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
 Generate Android native project (Java + XML) dari payload.json.
-Lengkap: Debug log payload, Package ID unik per aplikasi,
-multi-key JSON reader, dan proteksi anti-HTML stripping.
+Mendukung auto-decode Base64 dari STB (xml_code_b64 & java_code_b64),
+package dinamis anti-bentrok, dan proteksi anti-stripping browser.
 """
+import base64
 import json
 import os
 import pathlib
@@ -24,7 +25,7 @@ def die(msg, code=2):
 
 
 def safe_get(d, keys, default=""):
-    """Membaca berbagai kemungkinan nama key dari payload bot."""
+    """Membaca string biasa dari daftar kemungkinan nama key."""
     if not isinstance(d, dict):
         return default
     if isinstance(keys, str):
@@ -36,15 +37,36 @@ def safe_get(d, keys, default=""):
     return default
 
 
-# Template Layout Darurat jika kode dari AI benar-benar kosong
-FALLBACK_LAYOUT = (
-    LT + '?xml version="1.0" encoding="utf-8"?' + GT + '\n'
-    + LT + 'LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"\n'
-    + '    android:layout_width="match_parent"\n'
-    + '    android:layout_height="match_parent"\n'
-    + '    android:orientation="vertical"\n'
-    + '    android:gravity="center"\n'
-    + '    android:padding="24dp">\n\n'
+def get_code_payload(d, b64_keys, plain_keys):
+    """Membaca kode baik dalam format Base64 maupun teks biasa."""
+    if not isinstance(d, dict):
+        return ""
+
+    # 1. Cek key Base64 terlebih dahulu
+    if isinstance(b64_keys, str):
+        b64_keys = [b64_keys]
+    for k in b64_keys:
+        raw = d.get(k)
+        if raw and isinstance(raw, str) and raw.strip():
+            try:
+                decoded = base64.b64decode(raw.strip()).decode("utf-8", errors="ignore")
+                if decoded.strip():
+                    return decoded.strip()
+            except Exception as e:
+                print(f"[WARN] Gagal decode Base64 pada key '{k}': {e}", file=sys.stderr)
+
+    # 2. Cek key plain text biasa
+    if isinstance(plain_keys, str):
+        plain_keys = [plain_keys]
+    for k in plain_keys:
+        raw = d.get(k)
+        if raw and isinstance(raw, str) and raw.strip():
+            raw_str = raw.strip()
+            # Antisipasi jika isi plain_keys ternyata juga Base64
+            if "<" not in raw_str and " " not in raw_str and len(raw_str) % 4 == 0 and len(raw_str) > 50:
+                try:
+                    decoded = base64.b64decode(raw_str).decode("utf-8", errors="ignore")
+                    if "\n\n'
     + '    ' + LT + 'TextView\n'
     + '        android:id="@+id/tvTitle"\n'
     + '        android:layout_width="wrap_content"\n'
@@ -150,7 +172,7 @@ def sanitize_layout(raw_xml):
     xml = strip_code_fences(raw_xml)
     xml = ensure_root_xml(xml)
     if not xml or len(xml.strip()) in range(0, 30):
-        print("[WARN] Kode Layout kosong/hilang! Memakai fallback template.", file=sys.stderr)
+        print("[WARN] Kode Layout kosong/terlalu pendek! Memakai fallback template.", file=sys.stderr)
         return FALLBACK_LAYOUT
     xml = fix_xml_escapes(xml)
     xml = fix_missing_id_prefix(xml)
@@ -253,7 +275,7 @@ def main():
         die(f"payload.json bukan format JSON valid: {e}")
 
     # ========================================================
-    # LOG DEBUG: Memeriksa isi asli data yang dikirim dari STB
+    # LOG DEBUG: Mengecek data masuk dari STB
     # ========================================================
     print("==================================================")
     print("=== ISI PAYLOAD.JSON YANG DITERIMA DARI STB ===")
@@ -265,9 +287,8 @@ def main():
         else:
             print(f"-> Key '{k}': {repr(v)}")
     print("==================================================")
-    # ========================================================
 
-    # 1. Bersihkan Nama Aplikasi
+    # 1. Nama Aplikasi
     raw_name = safe_get(data, ["app_name", "title", "name"], "DynamicApp")
     clean_app_name = re.sub(LT + r"[^" + GT + r"]+" + GT, "", raw_name)
     clean_app_name = (
@@ -279,25 +300,34 @@ def main():
     if not clean_app_name:
         clean_app_name = "DynamicApp"
 
-    # 2. Package Name Dinamis (Anti-Bentrok saat dipasang di HP)
+    # 2. Package Name Dinamis
     pkg_suffix = re.sub(r"[^a-zA-Z0-9]", "", clean_app_name).lower()
     if not pkg_suffix or len(pkg_suffix) < 3:
         pkg_suffix = "dynamicapp"
     pkg = f"com.stb.{pkg_suffix}"
 
-    # 3. Baca Kode Layout & Java (Mendukung Multi-Key)
-    layout_raw = safe_get(data, ["activity_main_xml", "layout_xml", "layout", "xml", "code_xml"])
-    java_raw = safe_get(data, ["main_activity_java", "java_code", "main_activity", "java", "code"])
+    # 3. Baca & Decode Kode Layout XML dan Java (Mendukung Base64 & Plain)
+    layout_raw = get_code_payload(
+        data,
+        b64_keys=["xml_code_b64", "layout_xml_b64", "activity_main_xml_b64", "layout_b64"],
+        plain_keys=["activity_main_xml", "layout_xml", "layout", "xml", "code_xml"],
+    )
+
+    java_raw = get_code_payload(
+        data,
+        b64_keys=["java_code_b64", "main_activity_java_b64", "java_b64"],
+        plain_keys=["main_activity_java", "java_code", "main_activity", "java", "code"],
+    )
 
     print(f"[*] App Name        : {clean_app_name}")
     print(f"[*] Dynamic Package : {pkg}")
-    print(f"[*] Input XML size  : {len(layout_raw)} bytes")
-    print(f"[*] Input Java size : {len(java_raw)} bytes")
+    print(f"[*] Decoded XML size: {len(layout_raw)} bytes")
+    print(f"[*] Decoded Java size: {len(java_raw)} bytes")
 
     layout_xml = sanitize_layout(layout_raw)
     main_java = sanitize_java(java_raw, pkg)
 
-    # 4. Konfigurasi Gradle
+    # 4. Pengaturan Root Gradle
     write(ROOT / "settings.gradle", (
         "pluginManagement {\n"
         "    repositories {\n"
@@ -329,6 +359,7 @@ def main():
         "android.nonTransitiveRClass=true\n"
     ))
 
+    # 5. App Module Build Configuration
     write(ROOT / "app" / "build.gradle", (
         "plugins { id 'com.android.application' }\n\n"
         "android {\n"
@@ -354,7 +385,7 @@ def main():
         "}\n"
     ))
 
-    # 5. Manifest
+    # 6. Manifest
     manifest_content = (
         LT + '?xml version="1.0" encoding="utf-8"?' + GT + '\n'
         + LT + 'manifest xmlns:android="http://schemas.android.com/apk/res/android">\n'
@@ -377,7 +408,7 @@ def main():
     )
     write(ROOT / "app" / "src" / "main" / "AndroidManifest.xml", manifest_content)
 
-    # 6. Resources & Source Code
+    # 7. Resources & Source Code
     strings_content = (
         LT + '?xml version="1.0" encoding="utf-8"?' + GT + '\n'
         + LT + 'resources' + GT + '\n'
@@ -392,7 +423,7 @@ def main():
     java_path = ROOT / "app" / "src" / "main" / "java" / pathlib.Path(*pkg.split("."))
     write(java_path / "MainActivity.java", main_java)
 
-    print(f"[OK] Proyek Android {clean_app_name} ({pkg}) berhasil dibangun!")
+    print(f"[OK] Proyek Android {clean_app_name} ({pkg}) berhasil dibangun dengan kode kustom AI!")
 
 
 if __name__ == "__main__":
