@@ -1,6 +1,141 @@
-# generate_project.py (Bagian template MainActivity.java & AndroidManifest.xml)
+#!/usr/bin/env python3
+import sys
+import os
+import re
+import base64
 
-MAIN_ACTIVITY_JAVA = """package com.apkbuilder.app;
+def generate_android_project(app_name: str, html_b64: str):
+    # Bersihkan nama aplikasi untuk identifier Java/XML
+    safe_name = re.sub(r'[^a-zA-Z0-9]', '', app_name)
+    if not safe_name:
+        safe_name = "GeneratedApp"
+
+    # Decode HTML
+    try:
+        html_content = base64.b64decode(html_b64).decode("utf-8")
+    except Exception:
+        html_content = "<!DOCTYPE html><html><body><h1>Aplikasi Gagal Dimuat</h1></body></html>"
+
+    # Direktori struktur Android standar
+    dirs = [
+        "app",
+        "app/src/main/java/com/apkbuilder/app",
+        "app/src/main/assets",
+        "app/src/main/res/values",
+        "app/src/main/res/mipmap-hdpi"
+    ]
+    for d in dirs:
+        os.makedirs(d, exist_ok=True)
+
+    # 1. Simpan index.html ke folder assets
+    with open("app/src/main/assets/index.html", "w", encoding="utf-8") as f:
+        f.write(html_content)
+
+    # 2. settings.gradle (Root)
+    with open("settings.gradle", "w", encoding="utf-8") as f:
+        f.write('rootProject.name = "UniversalApp"\ninclude(":app")\n')
+
+    # 3. build.gradle (Root)
+    with open("build.gradle", "w", encoding="utf-8") as f:
+        f.write("""buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath "com.android.tools.build:gradle:8.2.2"
+    }
+}
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+""")
+
+    # 4. gradle.properties
+    with open("gradle.properties", "w", encoding="utf-8") as f:
+        f.write("""org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+android.useAndroidX=true
+android.nonTransitiveRClass=true
+""")
+
+    # 5. app/build.gradle
+    with open("app/build.gradle", "w", encoding="utf-8") as f:
+        f.write("""apply plugin: 'com.android.application'
+
+android {
+    namespace 'com.apkbuilder.app'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.apkbuilder.app"
+        minSdk 21
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+        debug {
+            minifyEnabled false
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    // Tanpa library berat eksternal agar build secepat kilat & zero compile error
+}
+""")
+
+    # 6. app/src/main/res/values/strings.xml
+    with open("app/src/main/res/values/strings.xml", "w", encoding="utf-8") as f:
+        f.write(f"""<resources>
+    <string name="app_name">{safe_name}</string>
+</resources>
+""")
+
+    # 7. app/src/main/AndroidManifest.xml
+    with open("app/src/main/AndroidManifest.xml", "w", encoding="utf-8") as f:
+        f.write("""<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.apkbuilder.app">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <application
+        android:allowBackup="true"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:hardwareAccelerated="true"
+        android:usesCleartextTraffic="true">
+        
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
+""")
+
+    # 8. app/src/main/java/com/apkbuilder/app/MainActivity.java
+    with open("app/src/main/java/com/apkbuilder/app/MainActivity.java", "w", encoding="utf-8") as f:
+        f.write("""package com.apkbuilder.app;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
@@ -30,10 +165,10 @@ public class MainActivity extends Activity {
         webView = new WebView(this);
         setContentView(webView);
 
-        // 1. Konfigurasi WebSettings Lengkap
+        // Pengaturan WebView tangguh anti-blank
         WebSettings ws = webView.getSettings();
         ws.setJavaScriptEnabled(true);
-        ws.setDomStorageEnabled(true);              // WAJIB: Aktifkan localStorage & sessionStorage
+        ws.setDomStorageEnabled(true);
         ws.setDatabaseEnabled(true);
         ws.setAllowFileAccess(true);
         ws.setAllowContentAccess(true);
@@ -44,14 +179,14 @@ public class MainActivity extends Activity {
         ws.setSupportZoom(false);
         ws.setCacheMode(WebSettings.LOAD_DEFAULT);
 
-        // 2. Aktifkan Hardware Acceleration pada WebView
+        // Hardware acceleration level layer
         webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
 
-        // 3. Tangkap Logcat Console agar error JS terlihat di Logcat Android
+        // Monitoring Logcat
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
             public boolean onConsoleMessage(ConsoleMessage cm) {
-                Log.d("APK_JS_LOG", cm.message() + " [Line " + cm.lineNumber() + " of " + cm.sourceId() + "]");
+                Log.d("APK_JS_LOG", cm.message() + " [Baris " + cm.lineNumber() + "]");
                 return true;
             }
         });
@@ -63,7 +198,7 @@ public class MainActivity extends Activity {
             }
         });
 
-        // 4. Muat HTML menggunakan loadDataWithBaseURL dengan Origin Lokal Standar
+        // Muat file index.html dari folder assets
         try {
             InputStream is = getAssets().open("index.html");
             BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8));
@@ -75,10 +210,9 @@ public class MainActivity extends Activity {
             reader.close();
             is.close();
 
-            // Gunakan skema https lokal agar localStorage terisolasi dengan aman tanpa diblokir
             webView.loadDataWithBaseURL("https://appassets.androidcache.local/", sb.toString(), "text/html", "UTF-8", null);
         } catch (Exception e) {
-            Log.e("APK_LOAD_FAIL", "Fallback ke file URL asset", e);
+            Log.e("APK_LOAD_FAIL", "Gagal loadDataWithBaseURL, fallback ke direct file URL", e);
             webView.loadUrl("file:///android_asset/index.html");
         }
     }
@@ -92,32 +226,15 @@ public class MainActivity extends Activity {
         }
     }
 }
-"""
+""")
 
-ANDROID_MANIFEST_XML = """<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.apkbuilder.app">
+    print(f"[OK] Sukses merakit project Android untuk aplikasi: {safe_name}")
 
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+if __name__ == "__main__":
+    if len(sys.argv) < 3:
+        print("Penggunaan: python generate_project.py <APP_NAME> <HTML_BASE64>")
+        sys.exit(1)
 
-    <application
-        android:allowBackup="true"
-        android:label="GeneratedApp"
-        android:supportsRtl="true"
-        android:hardwareAccelerated="true"
-        android:usesCleartextTraffic="true">
-        
-        <activity
-            android:name=".MainActivity"
-            android:exported="true"
-            android:configChanges="orientation|screenSize|keyboardHidden"
-            android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
-    </application>
-</manifest>
-"""
+    app_name_arg = sys.argv[1]
+    html_b64_arg = sys.argv[2]
+    generate_android_project(app_name_arg, html_b64_arg)
