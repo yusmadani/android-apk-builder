@@ -2,52 +2,74 @@ name: Build Dynamic APK
 
 on:
   repository_dispatch:
-    types: [build_dynamic_apk]
+    types: [build_apk]
+  workflow_dispatch:
+    inputs:
+      chat_id:
+        description: 'Telegram Chat ID'
+        required: true
+        default: '123456789'
+      app_name:
+        description: 'Nama Aplikasi'
+        required: false
+        default: 'TestApp'
+      html_code_b64:
+        description: 'HTML Base64'
+        required: false
+        default: 'PCFET0NUWVBFIGh0bWw+PGh0bWw+PGJvZHk+PGgxPkFQS19PSzwvaDE+PC9ib2R5PjwvaHRtbD4='
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout Repository
+      - name: 1. Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      - name: 2. Setup Python Environment
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 3. Setup JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
+      - name: 4. Setup Android SDK
+        uses: android-actions/setup-android@v3
 
-      - name: Prepare Payload & Run Generator
+      - name: 5. Generate Android Project Structure
+        env:
+          CHAT_ID: ${{ github.event.client_payload.chat_id || inputs.chat_id }}
+          APP_NAME: ${{ github.event.client_payload.app_name || inputs.app_name || 'GeneratedApp' }}
+          HTML_B64: ${{ github.event.client_payload.html_code_b64 || inputs.html_code_b64 }}
         run: |
-          echo '${{ toJson(github.event.client_payload) }}' > payload.json
-          python generate_project.py
+          python generate_project.py "$APP_NAME" "$HTML_B64"
 
-      - name: Grant Execute Permission to Gradle
-        run: chmod +x gradlew || gradle wrapper
-
-      - name: Build APK with Gradle
-        run: ./gradlew assembleDebug --stacktrace
-
-      - name: Send APK to Telegram
+      - name: 6. Compile APK via Gradle
         run: |
-          CHAT_ID="${{ github.event.client_payload.chat_id }}"
-          APP_NAME="${{ github.event.client_payload.app_name }}"
-          BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
-          APK_PATH=$(find app/build/outputs/apk/debug/ -name "*.apk" | head -n 1)
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
 
-          if [ -f "$APK_PATH" ]; then
-            curl -F chat_id="$CHAT_ID" \
-                 -F document=@"$APK_PATH" \
-                 -F caption="✅ *Aplikasi Selesai!*%0A📱 Nama: $APP_NAME%0A🎉 Berhasil dirakit via Universal Native Shell." \
-                 -F parse_mode="Markdown" \
-                 https://api.telegram.org/bot$BOT_TOKEN/sendDocument
-          else
-            curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" \
-                 -d chat_id="$CHAT_ID" \
-                 -d text="❌ Gagal menemukan file APK hasil kompilasi."
+      - name: 7. Kirim APK ke Telegram
+        env:
+          CHAT_ID: ${{ github.event.client_payload.chat_id || inputs.chat_id }}
+          APP_NAME: ${{ github.event.client_payload.app_name || inputs.app_name || 'GeneratedApp' }}
+          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: |
+          APK_PATH=$(find app/build/outputs/apk/debug -name "*.apk" | head -n 1)
+          
+          if [ -z "$APK_PATH" ]; then
+            echo "File APK tidak ditemukan!"
+            exit 1
           fi
+
+          echo "Mengirim $APK_PATH ke Telegram Chat ID: $CHAT_ID"
+          
+          curl -v -F chat_id="$CHAT_ID" \
+               -F document=@"$APK_PATH" \
+               -F caption="✅ Aplikasi *$APP_NAME* berhasil dikompilasi! Silakan unduh dan install di HP." \
+               -F parse_mode="Markdown" \
+               "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument"
