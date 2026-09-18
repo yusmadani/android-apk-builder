@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """
-Native Android Generator (Cyberpunk Edition)
-- Target: Android 10+ (API 26+)
-- Arsitektur: Native Android + Room SQLite + AppWidgetProvider
-- Tema: Cyberpunk (#0F2744 Dark Blue, #00D4AA Cyan, #FF00FF Magenta)
-- Output: APK Native ~4.5 MB
+Native Android Generator (Cyberpunk Edition - Active Navigation & PDF Export)
+- Menu Tab Interaktif (Dashboard, Jadwal, Export PDF).
+- Room SQLite Database.
+- Native PDF Engine bawaan Android OS.
 """
 import os
 import pathlib
@@ -53,7 +52,7 @@ def main():
         "android.nonTransitiveRClass=true\n"
     )
 
-    # 2. App Gradle (Room DB + Material Components)
+    # 2. App Gradle
     write(ROOT / "app" / "build.gradle",
         "plugins { id 'com.android.application' }\n\n"
         "android {\n"
@@ -66,11 +65,7 @@ def main():
         "        versionCode 1\n"
         "        versionName '1.5'\n"
         "    }\n"
-        "    buildTypes {\n"
-        "        release {\n"
-        "            minifyEnabled false\n"
-        "        }\n"
-        "    }\n"
+        "    buildTypes { release { minifyEnabled false } }\n"
         "    compileOptions {\n"
         "        sourceCompatibility JavaVersion.VERSION_17\n"
         "        targetCompatibility JavaVersion.VERSION_17\n"
@@ -85,7 +80,7 @@ def main():
         "}\n"
     )
 
-    # 3. Android Manifest (Sintaks diperbaiki)
+    # 3. Android Manifest
     write(ROOT / "app" / "src" / "main" / "AndroidManifest.xml",
         f"{LT}?xml version=\"1.0\" encoding=\"utf-8\"?{GT}\n"
         f"{LT}manifest xmlns:android=\"http://schemas.android.com/apk/res/android\"{GT}\n"
@@ -115,7 +110,7 @@ def main():
         f"{LT}/manifest{GT}\n"
     )
 
-    # 4. Resources: Colors, Themes, Strings, Widget Info
+    # 4. Resources
     write(ROOT / "app" / "src" / "main" / "res" / "values" / "colors.xml",
         f"{LT}?xml version=\"1.0\" encoding=\"utf-8\"?{GT}\n"
         f"{LT}resources{GT}\n"
@@ -165,7 +160,6 @@ def main():
         f'    android:widgetCategory="home_screen" /{GT}\n'
     )
 
-    # 5. XML Layouts
     write(ROOT / "app" / "src" / "main" / "res" / "layout" / "widget_layout.xml",
         f"{LT}?xml version=\"1.0\" encoding=\"utf-8\"?{GT}\n"
         f'{LT}LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"\n'
@@ -179,6 +173,7 @@ def main():
         f"{LT}/LinearLayout{GT}\n"
     )
 
+    # 5. Activity Layout (3 Container View untuk Masing-Masing Menu)
     write(ROOT / "app" / "src" / "main" / "res" / "layout" / "activity_main.xml",
         f"{LT}?xml version=\"1.0\" encoding=\"utf-8\"?{GT}\n"
         f'{LT}RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"\n'
@@ -187,26 +182,39 @@ def main():
         f'    android:background="@color/cyber_bg"{GT}\n'
         f'    {LT}ScrollView android:layout_width="match_parent" android:layout_height="match_parent" android:layout_above="@id/bottom_nav"{GT}\n'
         f'        {LT}LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="18dp"{GT}\n'
-        f'            {LT}TextView android:id="@+id/txt_clock" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="12:00:00" android:textColor="@color/cyber_cyan" android:textSize="32sp" android:textStyle="bold" /{GT}\n'
-        f'            {LT}TextView android:id="@+id/txt_profile" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Guru: Centoa | Sekolah: SMK Cyber" android:textColor="@color/text_dim" android:textSize="14sp" android:layout_marginBottom="16dp" /{GT}\n'
-        f'            {LT}LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:weightSum="3" android:layout_marginBottom="16dp"{GT}\n'
-        f'                {LT}TextView android:id="@+id/stat_total" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@color/cyber_card" android:padding="12dp" android:gravity="center" android:text="12\\nJADWAL" android:textColor="@color/text_white" /{GT}\n'
-        f'                {LT}TextView android:id="@+id/stat_kelas" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@color/cyber_card" android:layout_marginStart="8dp" android:padding="12dp" android:gravity="center" android:text="4\\nKELAS" android:textColor="@color/cyber_cyan" /{GT}\n'
-        f'                {LT}TextView android:id="@+id/stat_ruang" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@color/cyber_card" android:layout_marginStart="8dp" android:padding="12dp" android:gravity="center" android:text="3\\nRUANG" android:textColor="@color/cyber_magenta" /{GT}\n'
+        f'            {LT}!-- VIEW 1: DASHBOARD --{GT}\n'
+        f'            {LT}LinearLayout android:id="@+id/view_dashboard" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical"{GT}\n'
+        f'                {LT}TextView android:id="@+id/txt_clock" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="12:00:00" android:textColor="@color/cyber_cyan" android:textSize="32sp" android:textStyle="bold" /{GT}\n'
+        f'                {LT}TextView android:id="@+id/txt_profile" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Guru: Centoa | Sekolah: SMK Cyber" android:textColor="@color/text_dim" android:textSize="14sp" android:layout_marginBottom="16dp" /{GT}\n'
+        f'                {LT}LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:weightSum="3" android:layout_marginBottom="16dp"{GT}\n'
+        f'                    {LT}TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@color/cyber_card" android:padding="12dp" android:gravity="center" android:text="4\\nJADWAL" android:textColor="@color/text_white" /{GT}\n'
+        f'                    {LT}TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@color/cyber_card" android:layout_marginStart="8dp" android:padding="12dp" android:gravity="center" android:text="4\\nKELAS" android:textColor="@color/cyber_cyan" /{GT}\n'
+        f'                    {LT}TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@color/cyber_card" android:layout_marginStart="8dp" android:padding="12dp" android:gravity="center" android:text="4\\nRUANG" android:textColor="@color/cyber_magenta" /{GT}\n'
+        f'                {LT}/LinearLayout{GT}\n'
         f'            {LT}/LinearLayout{GT}\n'
-        f'            {LT}TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="DAFTAR JADWAL HARI INI" android:textColor="@color/cyber_cyan" android:textSize="16sp" android:textStyle="bold" android:layout_marginBottom="10dp" /{GT}\n'
-        f'            {LT}LinearLayout android:id="@+id/schedule_list_container" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" /{GT}\n'
+        f'            {LT}!-- VIEW 2: DAFTAR JADWAL --{GT}\n'
+        f'            {LT}LinearLayout android:id="@+id/view_jadwal" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical"{GT}\n'
+        f'                {LT}TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="DAFTAR JADWAL LENGKAP" android:textColor="@color/cyber_cyan" android:textSize="16sp" android:textStyle="bold" android:layout_marginBottom="10dp" /{GT}\n'
+        f'                {LT}LinearLayout android:id="@+id/schedule_list_container" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" /{GT}\n'
+        f'            {LT}/LinearLayout{GT}\n'
+        f'            {LT}!-- VIEW 3: EXPORT PDF --{GT}\n'
+        f'            {LT}LinearLayout android:id="@+id/view_export" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone"{GT}\n'
+        f'                {LT}TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="CETAK JADWAL KE PDF" android:textColor="@color/cyber_magenta" android:textSize="18sp" android:textStyle="bold" android:layout_marginBottom="8dp" /{GT}\n'
+        f'                {LT}TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Simpan format dokumen resmi A4 ke folder penyimpanan internal perangkat." android:textColor="@color/text_dim" android:textSize="13sp" android:layout_marginBottom="20dp" /{GT}\n'
+        f'                {LT}Button android:id="@+id/btn_generate_pdf" android:layout_width="match_parent" android:layout_height="52dp" android:backgroundTint="@color/cyber_cyan" android:text="GENERATE PDF JADWAL" android:textColor="#070D18" android:textStyle="bold" /{GT}\n'
+        f'            {LT}/LinearLayout{GT}\n'
         f'        {LT}/LinearLayout{GT}\n'
         f'    {LT}/ScrollView{GT}\n'
-        f'    {LT}LinearLayout android:id="@+id/bottom_nav" android:layout_width="match_parent" android:layout_height="60dp" android:layout_alignParentBottom="true" android:background="@color/cyber_card" android:orientation="horizontal" android:weightSum="3"{GT}\n'
-        f'        {LT}TextView android:id="@+id/nav_dashboard" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:text="DASHBOARD" android:textColor="@color/cyber_cyan" android:textStyle="bold" /{GT}\n'
-        f'        {LT}TextView android:id="@+id/nav_jadwal" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:text="JADWAL" android:textColor="@color/text_dim" /{GT}\n'
-        f'        {LT}TextView android:id="@+id/nav_export" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:text="EXPORT PDF" android:textColor="@color/text_dim" /{GT}\n'
+        f'    {LT}!-- BOTTOM NAVIGATION --{GT}\n'
+        f'    {LT}LinearLayout android:id="@+id/bottom_nav" android:layout_width="match_parent" android:layout_height="62dp" android:layout_alignParentBottom="true" android:background="@color/cyber_card" android:orientation="horizontal" android:weightSum="3"{GT}\n'
+        f'        {LT}TextView android:id="@+id/nav_dashboard" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:text="DASHBOARD" android:textColor="@color/cyber_cyan" android:textStyle="bold" android:clickable="true" android:focusable="true" /{GT}\n'
+        f'        {LT}TextView android:id="@+id/nav_jadwal" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:text="JADWAL" android:textColor="@color/text_dim" android:clickable="true" android:focusable="true" /{GT}\n'
+        f'        {LT}TextView android:id="@+id/nav_export" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:text="EXPORT PDF" android:textColor="@color/text_dim" android:clickable="true" android:focusable="true" /{GT}\n'
         f'    {LT}/LinearLayout{GT}\n'
         f"{LT}/RelativeLayout{GT}\n"
     )
 
-    # 6. Room Database Source Code (Java)
+    # 6. Room Source Code & MainActivity Lengkap
     src_dir = ROOT / "app" / "src" / "main" / "java" / pkg_path
 
     # Entity
@@ -298,28 +306,49 @@ def main():
         "}\n"
     )
 
-    # MainActivity
+    # MainActivity (Event Listener Klik & PDF Builder)
     write(src_dir / "MainActivity.java",
         f"package {pkg};\n\n"
         "import android.app.Activity;\n"
+        "import android.content.Context;\n"
+        "import android.graphics.Color;\n"
+        "import android.graphics.Paint;\n"
+        "import android.graphics.pdf.PdfDocument;\n"
         "import android.os.Bundle;\n"
         "import android.os.Handler;\n"
         "import android.os.Looper;\n"
+        "import android.os.Vibrator;\n"
+        "import android.view.View;\n"
+        "import android.widget.Button;\n"
         "import android.widget.LinearLayout;\n"
         "import android.widget.TextView;\n"
-        "import android.graphics.Color;\n"
+        "import android.widget.Toast;\n"
+        "import java.io.File;\n"
+        "import java.io.FileOutputStream;\n"
         "import java.text.SimpleDateFormat;\n"
         "import java.util.Date;\n"
         "import java.util.List;\n"
         "import java.util.Locale;\n\n"
         "public class MainActivity extends Activity {\n"
-        "    private TextView txtClock;\n"
-        "    private Handler handler = new Handler(Looper.getMainLooper());\n\n"
+        "    private TextView txtClock, navDashboard, navJadwal, navExport;\n"
+        "    private LinearLayout viewDashboard, viewJadwal, viewExport, containerJadwal;\n"
+        "    private Button btnGeneratePdf;\n"
+        "    private Handler handler = new Handler(Looper.getMainLooper());\n"
+        "    private Vibrator vibrator;\n\n"
         "    @Override\n"
         "    protected void onCreate(Bundle savedInstanceState) {\n"
         "        super.onCreate(savedInstanceState);\n"
         "        setContentView(R.layout.activity_main);\n\n"
+        "        vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);\n"
         "        txtClock = findViewById(R.id.txt_clock);\n"
+        "        navDashboard = findViewById(R.id.nav_dashboard);\n"
+        "        navJadwal = findViewById(R.id.nav_jadwal);\n"
+        "        navExport = findViewById(R.id.nav_export);\n"
+        "        viewDashboard = findViewById(R.id.view_dashboard);\n"
+        "        viewJadwal = findViewById(R.id.view_jadwal);\n"
+        "        viewExport = findViewById(R.id.view_export);\n"
+        "        containerJadwal = findViewById(R.id.schedule_list_container);\n"
+        "        btnGeneratePdf = findViewById(R.id.btn_generate_pdf);\n\n"
         "        startClock();\n\n"
         "        AppDatabase db = AppDatabase.getInstance(this);\n"
         "        if (db.scheduleDao().count() == 0) {\n"
@@ -330,7 +359,84 @@ def main():
         "                new Schedule(\"Rabu\", \"10:00 - 12:00\", \"Mobile App Dev\", \"XII-RPL 2\", \"Lab Inovasi\")\n"
         "            );\n"
         "        }\n\n"
-        "        renderSchedules(db.scheduleDao().getAll());\n"
+        "        final List<Schedule> list = db.scheduleDao().getAll();\n"
+        "        renderSchedules(list);\n"
+        "        setupNavigation();\n\n"
+        "        btnGeneratePdf.setOnClickListener(new View.OnClickListener() {\n"
+        "            @Override\n"
+        "            public void onClick(View v) {\n"
+        "                vibratePhone();\n"
+        "                exportToPdf(list);\n"
+        "            }\n"
+        "        });\n"
+        "    }\n\n"
+        "    private void setupNavigation() {\n"
+        "        navDashboard.setOnClickListener(new View.OnClickListener() {\n"
+        "            @Override\n"
+        "            public void onClick(View v) {\n"
+        "                vibratePhone();\n"
+        "                viewDashboard.setVisibility(View.VISIBLE);\n"
+        "                viewJadwal.setVisibility(View.VISIBLE);\n"
+        "                viewExport.setVisibility(View.GONE);\n"
+        "                updateNavColors(navDashboard);\n"
+        "            }\n"
+        "        });\n\n"
+        "        navJadwal.setOnClickListener(new View.OnClickListener() {\n"
+        "            @Override\n"
+        "            public void onClick(View v) {\n"
+        "                vibratePhone();\n"
+        "                viewDashboard.setVisibility(View.GONE);\n"
+        "                viewJadwal.setVisibility(View.VISIBLE);\n"
+        "                viewExport.setVisibility(View.GONE);\n"
+        "                updateNavColors(navJadwal);\n"
+        "            }\n"
+        "        });\n\n"
+        "        navExport.setOnClickListener(new View.OnClickListener() {\n"
+        "            @Override\n"
+        "            public void onClick(View v) {\n"
+        "                vibratePhone();\n"
+        "                viewDashboard.setVisibility(View.GONE);\n"
+        "                viewJadwal.setVisibility(View.GONE);\n"
+        "                viewExport.setVisibility(View.VISIBLE);\n"
+        "                updateNavColors(navExport);\n"
+        "            }\n"
+        "        });\n"
+        "    }\n\n"
+        "    private void updateNavColors(TextView active) {\n"
+        "        navDashboard.setTextColor(Color.parseColor(\"#8EA5C8\"));\n"
+        "        navJadwal.setTextColor(Color.parseColor(\"#8EA5C8\"));\n"
+        "        navExport.setTextColor(Color.parseColor(\"#8EA5C8\"));\n"
+        "        active.setTextColor(Color.parseColor(\"#00D4AA\"));\n"
+        "    }\n\n"
+        "    private void vibratePhone() {\n"
+        "        if (vibrator != null) vibrator.vibrate(35);\n"
+        "    }\n\n"
+        "    private void exportToPdf(List<Schedule> list) {\n"
+        "        PdfDocument doc = new PdfDocument();\n"
+        "        PdfDocument.PageInfo pageInfo = new PdfDocument.PageInfo.Builder(595, 842, 1).create();\n"
+        "        PdfDocument.Page page = doc.startPage(pageInfo);\n\n"
+        "        Paint pTitle = new Paint();\n"
+        "        pTitle.setColor(Color.BLACK);\n"
+        "        pTitle.setTextSize(18f);\n"
+        "        pTitle.setFakeBoldText(true);\n"
+        "        page.getCanvas().drawText(\"JADWAL MENGAJAR GURU - CENTOA\", 40f, 60f, pTitle);\n\n"
+        "        Paint pBody = new Paint();\n"
+        "        pBody.setColor(Color.DKGRAY);\n"
+        "        pBody.setTextSize(12f);\n"
+        "        float y = 100f;\n"
+        "        for (Schedule s : list) {\n"
+        "            page.getCanvas().drawText(s.hari + \" (\" + s.jam + \") : \" + s.mapel + \" - \" + s.kelas + \" @ \" + s.ruangan, 40f, y, pBody);\n"
+        "            y += 24f;\n"
+        "        }\n\n"
+        "        doc.finishPage(page);\n"
+        "        try {\n"
+        "            File file = new File(getExternalFilesDir(null), \"Jadwal_Mengajar.pdf\");\n"
+        "            doc.writeTo(new FileOutputStream(file));\n"
+        "            doc.close();\n"
+        "            Toast.makeText(this, \"PDF Berhasil Dibuat: \" + file.getName(), Toast.LENGTH_LONG).show();\n"
+        "        } catch (Exception e) {\n"
+        "            Toast.makeText(this, \"Gagal membuat PDF: \" + e.getMessage(), Toast.LENGTH_SHORT).show();\n"
+        "        }\n"
         "    }\n\n"
         "    private void startClock() {\n"
         "        handler.post(new Runnable() {\n"
@@ -343,11 +449,10 @@ def main():
         "        });\n"
         "    }\n\n"
         "    private void renderSchedules(List<Schedule> list) {\n"
-        "        LinearLayout container = findViewById(R.id.schedule_list_container);\n"
-        "        container.removeAllViews();\n"
+        "        containerJadwal.removeAllViews();\n"
         "        for (Schedule s : list) {\n"
         "            TextView item = new TextView(this);\n"
-        "            item.setText(s.jam + \" | \" + s.mapel + \"\\n\" + s.kelas + \" (\" + s.ruangan + \")\");\n"
+        "            item.setText(s.hari + \" | \" + s.jam + \"\\n\" + s.mapel + \" - \" + s.kelas + \" (\" + s.ruangan + \")\");\n"
         "            item.setTextColor(Color.WHITE);\n"
         "            item.setTextSize(14f);\n"
         "            item.setPadding(24, 20, 24, 20);\n"
@@ -356,7 +461,7 @@ def main():
         "                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);\n"
         "            lp.setMargins(0, 0, 0, 16);\n"
         "            item.setLayoutParams(lp);\n"
-        "            container.addView(item);\n"
+        "            containerJadwal.addView(item);\n"
         "        }\n"
         "    }\n"
         "}\n"
