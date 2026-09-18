@@ -47,16 +47,9 @@ jobs:
           CODE_B64="${{ github.event.client_payload.html_code_b64 || github.event.inputs.code_b64 || '' }}"
           python3 generate_project.py "$APP_NAME" "$CODE_B64"
 
-      - name: Cache Node Modules
-        uses: actions/cache@v3
-        with:
-          path: node_modules
-          key: ${{ runner.os }}-node-modules-${{ hashFiles('package.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-modules-
-
       - name: Install React Native Dependencies
         run: |
+          npm install --save-dev @babel/core@^7.20.0 metro-react-native-babel-preset@^0.77.0 @react-native/babel-preset@0.73.21 --legacy-peer-deps
           npm install --legacy-peer-deps
 
       - name: Compile JS to Hermes Bytecode & Bundle
@@ -65,9 +58,11 @@ jobs:
           npx react-native bundle \
             --platform android \
             --dev false \
+            --reset-cache \
             --entry-file index.js \
             --bundle-output android/app/src/main/assets/index.android.bundle \
-            --assets-dest android/app/src/main/res
+            --assets-dest android/app/src/main/res \
+            --verbose
 
       - name: Build Standalone Hermes APK
         env:
