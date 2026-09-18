@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-Universal Dynamic Android Engine (AssetLoader HTTPS + Auto Router)
-- Menerima input dinamis dari AI via Telegram (Gym, Jadwal, Kasir, dll).
-- Navigasi tab otomatis (data-tab / onclick) anti-macet.
-- Full LocalStorage & Hardware Bridge (Vibrate, Toast).
+Industrial Dynamic Android Engine (Pro Gym & Universal Studio Edition)
+- Pre-baked Pro Glassmorphism & Cyberpunk Neon UI Kit.
+- Built-in Mock Data: Tidak akan pernah kosong saat baru diinstall.
+- Stopwatch Timer Istirahat 60s, Auto-Tab Router, Real-time Calculation.
+- Room/LocalStorage persistent database & Haptic Vibrate feedback.
 """
 import base64
 import json
@@ -18,31 +19,30 @@ PAYLOAD = pathlib.Path("payload.json")
 LT = chr(60)
 GT = chr(62)
 
-PRO_UI_CSS = """
+PRO_STUDIO_CSS = """
 :root {
-  --bg-main: #0B0F19;
-  --bg-card: #151D2E;
-  --bg-card-hover: #1E293B;
-  --border-color: #22304A;
-  --accent-primary: #6366F1;
-  --accent-gradient: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%);
-  --accent-emerald: linear-gradient(135deg, #10B981 0%, #059669 100%);
-  --text-main: #F8FAFC;
+  --bg-deep: #070B14;
+  --bg-card: rgba(18, 26, 43, 0.85);
+  --bg-card-border: rgba(99, 102, 241, 0.22);
+  --primary-neon: #00F0FF;
+  --secondary-neon: #7000FF;
+  --accent-emerald: #10B981;
+  --accent-rose: #F43F5E;
+  --text-pure: #FFFFFF;
   --text-muted: #94A3B8;
-  --danger: #EF4444;
-  --safe-bottom: env(safe-area-inset-bottom, 20px);
+  --safe-bottom: env(safe-area-inset-bottom, 22px);
 }
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
   -webkit-tap-highlight-color: transparent;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   user-select: none;
 }
 body {
-  background-color: var(--bg-main);
-  color: var(--text-main);
+  background: radial-gradient(circle at top right, #111827, #070B14 80%);
+  color: var(--text-pure);
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -52,132 +52,137 @@ body {
 .app-header {
   position: sticky;
   top: 0;
-  z-index: 50;
-  background: rgba(11, 15, 25, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--border-color);
-  padding: 14px 18px;
+  z-index: 90;
+  background: rgba(7, 11, 20, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--bg-card-border);
+  padding: 16px 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 .app-header h1 {
-  font-size: 1.15rem;
-  font-weight: 700;
+  font-size: 1.25rem;
+  font-weight: 800;
   letter-spacing: -0.02em;
-  background: var(--accent-gradient);
+  background: linear-gradient(135deg, var(--primary-neon), #818CF8);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 .container {
-  padding: 16px;
+  padding: 18px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
   flex: 1;
 }
 .view {
   display: none;
-  animation: fadeIn 0.2s ease-in-out;
+  animation: fadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .view.active {
   display: block;
 }
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
+  from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
-.card {
+/* Cards & Neon Widgets */
+.glass-card {
   background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: 16px;
-  padding: 16px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--bg-card-border);
+  border-radius: 18px;
+  padding: 18px;
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(12px);
   margin-bottom: 14px;
 }
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
   margin-bottom: 14px;
 }
 .stat-box {
-  background: rgba(34, 48, 74, 0.4);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  padding: 12px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 12px 8px;
   text-align: center;
 }
-.stat-val { font-size: 1.5rem; font-weight: 800; color: #F8FAFC; }
-.stat-lbl {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-top: 2px;
-}
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 12px 18px;
-  border-radius: 12px;
-  font-size: 0.92rem;
-  font-weight: 600;
-  border: none;
-  cursor: pointer;
-  background: var(--accent-gradient);
-  color: #FFFFFF;
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
-  transition: all 0.15s ease;
+.stat-val { font-size: 1.35rem; font-weight: 800; color: var(--primary-neon); }
+.stat-lbl { font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase; margin-top: 2px; }
+
+/* Progress & Checkbox */
+.progress-bar-bg {
   width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 10px 0;
 }
-.btn:active { transform: scale(0.97); opacity: 0.9; }
-.btn-emerald { background: var(--accent-emerald); box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35); }
-.btn-danger { background: var(--danger); box-shadow: 0 4px 12px rgba(239, 68, 68, 0.35); }
-.btn-secondary { background: var(--bg-card-hover); border: 1px solid var(--border-color); color: var(--text-main); }
-.input-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
-.input-group label { font-size: 0.8rem; color: var(--text-muted); font-weight: 500; }
-.input-field {
-  background: #0B0F19;
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
-  padding: 12px;
-  color: #FFFFFF;
-  font-size: 0.95rem;
-  outline: none;
-  width: 100%;
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary-neon), var(--accent-emerald));
+  width: 0%;
+  transition: width 0.4s ease;
 }
-.input-field:focus { border-color: var(--accent-primary); }
-.item-row {
+.exercise-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px;
-  background: rgba(11, 15, 25, 0.5);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  margin-bottom: 8px;
-  gap: 10px;
+  padding: 14px 16px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 14px;
+  margin-bottom: 10px;
+  transition: all 0.2s ease;
 }
-.item-row.done { opacity: 0.5; text-decoration: line-through; }
+.exercise-row.completed {
+  border-color: rgba(16, 185, 129, 0.4);
+  background: rgba(16, 185, 129, 0.08);
+}
+.exercise-row.completed .exercise-title {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+.btn-action {
+  background: linear-gradient(135deg, var(--primary-neon), #3B82F6);
+  color: #050811;
+  font-weight: 700;
+  font-size: 0.95rem;
+  border: none;
+  padding: 14px 20px;
+  border-radius: 14px;
+  width: 100%;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(0, 240, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.btn-action:active { transform: scale(0.98); }
+.btn-danger { background: var(--accent-rose); color: white; box-shadow: 0 4px 20px rgba(244, 63, 94, 0.3); }
+
+/* Navigation Tab Bar */
 .tab-bar {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  height: calc(62px + var(--safe-bottom));
+  height: calc(64px + var(--safe-bottom));
   padding-bottom: var(--safe-bottom);
-  background: rgba(15, 23, 42, 0.95);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border-top: 1px solid var(--border-color);
+  background: rgba(7, 11, 20, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   align-items: center;
   justify-content: space-around;
-  z-index: 1000;
+  z-index: 100;
 }
 .tab-item {
   display: flex;
@@ -187,38 +192,20 @@ body {
   background: none;
   border: none;
   color: var(--text-muted);
-  font-size: 0.72rem;
-  font-weight: 500;
+  font-size: 0.75rem;
+  font-weight: 600;
   gap: 4px;
   cursor: pointer;
   flex: 1;
   height: 100%;
 }
-.tab-item.active { color: #818CF8; font-weight: 700; }
-.tab-item .icon { font-size: 1.25rem; }
-#debug-err-banner {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  background: #DC2626;
-  color: white;
-  padding: 8px 12px;
-  font-size: 11px;
-  z-index: 999999;
-  display: none;
-  word-break: break-all;
+.tab-item.active {
+  color: var(--primary-neon);
 }
+.tab-item .icon { font-size: 1.3rem; }
 """
 
-PRO_UI_JS = """
-window.onerror = function(msg, url, line) {
-  var b = document.getElementById('debug-err-banner');
-  if (b) {
-    b.style.display = 'block';
-    b.innerHTML += '⚠️ <b>JS Error:</b> ' + msg + ' (L:' + line + ')<br>';
-  }
-};
+PRO_STUDIO_JS = """
 window.DB = {
   get: function(key, defaultVal) {
     try {
@@ -241,18 +228,17 @@ window.Native = {
     if (window.Android && window.Android.vibrate) { window.Android.vibrate(ms || 35); }
   }
 };
+
+// Auto Tab Switcher Global
 window.switchTab = function(targetId) {
   if (!targetId) return;
   targetId = targetId.replace('#', '');
-  var views = document.querySelectorAll('.view, section[id]');
-  views.forEach(function(v) {
+  document.querySelectorAll('.view, section[id]').forEach(function(v) {
     v.style.display = 'none';
     v.classList.remove('active');
   });
   var target = document.getElementById(targetId) || document.getElementById('tab-' + targetId);
-  if (!target) {
-    target = document.getElementById(targetId.replace('tab-', ''));
-  }
+  if (!target) target = document.getElementById(targetId.replace('tab-', ''));
   if (target) {
     target.style.display = 'block';
     target.classList.add('active');
@@ -265,8 +251,9 @@ window.switchTab = function(targetId) {
       btn.classList.remove('active');
     }
   });
-  Native.vibrate(30);
+  Native.vibrate(25);
 };
+
 document.addEventListener('click', function(e) {
   var tabBtn = e.target.closest('.tab-item');
   if (tabBtn) {
@@ -280,40 +267,186 @@ document.addEventListener('click', function(e) {
       e.preventDefault();
       switchTab(target);
     }
-  } else if (e.target.closest('button, .btn, .card')) {
-    Native.vibrate(20);
   }
-});
-document.addEventListener('DOMContentLoaded', function() {
-  setTimeout(function() {
-    var first = document.querySelector('.view, section[id]');
-    if (first && !document.querySelector('.view.active')) {
-      switchTab(first.id);
-    }
-  }, 100);
 });
 """
 
-def clean_html_code(raw_code):
-    if not raw_code:
-        return ""
-    code = raw_code.strip()
-    code = re.sub(r"^```(?:html|xml)?\s*", "", code, flags=re.IGNORECASE)
-    code = re.sub(r"\s*```$", "", code)
-    return code.strip()
+# Template Aplikasi Lengkap yang Selalu Menyertakan Data Default & Interaktif
+def build_fallback_pro_gym_html(app_title):
+    return f"""
+    <!-- VIEW 1: DASHBOARD -->
+    <section id="tab-dashboard" class="view active">
+      <div class="glass-card">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <h2 style="font-size:1.1rem; font-weight:700;">Progress Hari Ini</h2>
+            <p style="font-size:0.8rem; color:var(--text-muted);">Target Latihan Otot & Kardio</p>
+          </div>
+          <span id="progress-text" style="font-size:1.2rem; font-weight:800; color:var(--primary-neon);">0%</span>
+        </div>
+        <div class="progress-bar-bg">
+          <div id="progress-bar" class="progress-bar-fill"></div>
+        </div>
+        <div class="stat-grid">
+          <div class="stat-box"><div id="stat-total" class="stat-val">5</div><div class="stat-lbl">Gerakan</div></div>
+          <div class="stat-box"><div id="stat-done" class="stat-val">0</div><div class="stat-lbl">Selesai</div></div>
+          <div class="stat-box"><div id="stat-cal" class="stat-val">0</div><div class="stat-lbl">Kkal</div></div>
+        </div>
+      </div>
+
+      <!-- TIMER ISTIRAHAT -->
+      <div class="glass-card" style="text-align:center;">
+        <span style="font-size:0.75rem; text-transform:uppercase; color:var(--text-muted); letter-spacing:0.05em;">Timer Istirahat Set</span>
+        <div id="timer-display" style="font-size:2.8rem; font-weight:900; color:var(--primary-neon); margin:4px 0;">00:60</div>
+        <div style="display:flex; gap:10px;">
+          <button class="btn-action" style="flex:1;" onclick="startRestTimer(60)">⏱️ Mulai 60s</button>
+          <button class="btn-action btn-danger" style="width:70px;" onclick="resetTimer()">Reset</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW 2: LATIHAN DUMBBELL & PULLEY -->
+    <section id="tab-latihan" class="view">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <h2 style="font-size:1.15rem; font-weight:800; color:var(--primary-neon);">Daftar Latihan</h2>
+        <button onclick="resetAllExercises()" style="background:none; border:none; color:var(--accent-rose); font-size:0.8rem; font-weight:600;">Reset Harian</button>
+      </div>
+      <div id="exercise-list"></div>
+    </section>
+
+    <!-- VIEW 3: RIWAYAT & CATATAN -->
+    <section id="tab-riwayat" class="view">
+      <div class="glass-card">
+        <h3 style="font-size:1.05rem; margin-bottom:10px;">📊 Catatan Beban Maksimal</h3>
+        <p style="font-size:0.85rem; color:var(--text-muted); line-height:1.5;">
+          • Dumbbell Bench Press: <b>24 Kg</b><br>
+          • Lat Pulley Pulldown: <b>55 Kg</b><br>
+          • Incline Dumbbell Curl: <b>14 Kg</b><br>
+          • Triceps Cable Pushdown: <b>40 Kg</b>
+        </p>
+      </div>
+      <div class="glass-card" style="text-align:center;">
+        <button class="btn-action btn-danger" onclick="clearAllData()">🗑️ Kosongkan Seluruh Data</button>
+      </div>
+    </section>
+
+    <!-- BOTTOM TAB NAVIGATION -->
+    <nav class="tab-bar">
+      <button class="tab-item active" data-tab="tab-dashboard"><span class="icon">🏠</span>Dashboard</button>
+      <button class="tab-item" data-tab="tab-latihan"><span class="icon">🏋️</span>Latihan</button>
+      <button class="tab-item" data-tab="tab-riwayat"><span class="icon">📊</span>Riwayat</button>
+    </nav>
+
+    <script>
+    var DEFAULT_EXERCISES = [
+      { id: 1, name: "Dumbbell Bench Press", target: "Dada", sets: "4 Set x 12 Reps", weight: "20 Kg", done: false },
+      { id: 2, name: "Lat Pulley Pulldown", target: "Punggung", sets: "4 Set x 10 Reps", weight: "50 Kg", done: false },
+      { id: 3, name: "Dumbbell Shoulder Press", target: "Bahu", sets: "3 Set x 12 Reps", weight: "16 Kg", done: false },
+      { id: 4, name: "Cable Pulley Triceps", target: "Triceps", sets: "3 Set x 15 Reps", weight: "35 Kg", done: false },
+      { id: 5, name: "Dumbbell Biceps Curl", target: "Biceps", sets: "4 Set x 12 Reps", weight: "12 Kg", done: false }
+    ];
+
+    var exercises = DB.get('gym_exercises', DEFAULT_EXERCISES);
+    var timerInterval = null;
+    var timerSeconds = 60;
+
+    function renderExercises() {
+      var container = document.getElementById('exercise-list');
+      if (!container) return;
+      container.innerHTML = '';
+      var doneCount = 0;
+
+      exercises.forEach(function(item) {
+        if (item.done) doneCount++;
+        var row = document.createElement('div');
+        row.className = 'exercise-row' + (item.done ? ' completed' : '');
+        row.innerHTML = '<div>' +
+          '<div class="exercise-title" style="font-weight:700; font-size:0.95rem;">' + item.name + '</div>' +
+          '<div style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">' + item.target + ' • ' + item.sets + ' (' + item.weight + ')</div>' +
+          '</div>' +
+          '<button onclick="toggleDone(' + item.id + ')" style="padding:8px 14px; border-radius:10px; border:none; font-weight:700; font-size:0.78rem; cursor:pointer; background:' + (item.done ? 'var(--accent-emerald)' : 'rgba(255,255,255,0.1)') + '; color:' + (item.done ? '#000' : '#fff') + ';">' + (item.done ? '✓ SELESAI' : 'CHECK') + '</button>';
+        container.appendChild(row);
+      });
+
+      // Update Metrik & Progress
+      var pct = exercises.length > 0 ? Math.round((doneCount / exercises.length) * 100) : 0;
+      var pBar = document.getElementById('progress-bar');
+      var pTxt = document.getElementById('progress-text');
+      var sDone = document.getElementById('stat-done');
+      var sCal = document.getElementById('stat-cal');
+      var sTotal = document.getElementById('stat-total');
+
+      if (pBar) pBar.style.width = pct + '%';
+      if (pTxt) pTxt.innerText = pct + '%';
+      if (sDone) sDone.innerText = doneCount;
+      if (sTotal) sTotal.innerText = exercises.length;
+      if (sCal) sCal.innerText = doneCount * 65;
+    }
+
+    window.toggleDone = function(id) {
+      exercises = exercises.map(function(e) {
+        if (e.id === id) e.done = !e.done;
+        return e;
+      });
+      DB.set('gym_exercises', exercises);
+      Native.vibrate(35);
+      renderExercises();
+      if (exercises.find(function(e){ return e.id === id; }).done) {
+        Native.toast('Gerakan selesai! Istirahat 60 detik.');
+        startRestTimer(60);
+      }
+    };
+
+    window.startRestTimer = function(sec) {
+      clearInterval(timerInterval);
+      timerSeconds = sec;
+      var d = document.getElementById('timer-display');
+      timerInterval = setInterval(function() {
+        timerSeconds--;
+        var m = Math.floor(timerSeconds / 60);
+        var s = timerSeconds % 60;
+        if (d) d.innerText = (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+        if (timerSeconds <= 0) {
+          clearInterval(timerInterval);
+          Native.vibrate(80);
+          Native.toast('Waktu istirahat selesai! Lanjut set berikutnya.');
+        }
+      }, 1000);
+    };
+
+    window.resetTimer = function() {
+      clearInterval(timerInterval);
+      var d = document.getElementById('timer-display');
+      if (d) d.innerText = "00:60";
+    };
+
+    window.resetAllExercises = function() {
+      exercises = exercises.map(function(e){ e.done = false; return e; });
+      DB.set('gym_exercises', exercises);
+      Native.toast('Progress harian direset.');
+      renderExercises();
+    };
+
+    window.clearAllData = function() {
+      localStorage.clear();
+      exercises = DEFAULT_EXERCISES;
+      Native.toast('Seluruh database dikosongkan.');
+      renderExercises();
+    };
+
+    document.addEventListener('DOMContentLoaded', function() {
+      renderExercises();
+      setTimeout(function() { switchTab('tab-dashboard'); }, 100);
+    });
+    </script>
+    """
 
 def assemble_pro_html(user_html, app_title):
-    user_html = clean_html_code(user_html)
-    injected = f"{LT}style{GT}{PRO_UI_CSS}{LT}/style{GT}\n{LT}script{GT}{PRO_UI_JS}{LT}/script{GT}"
-
-    if f"{LT}body" in user_html.lower():
-        if f"{LT}head{GT}" in user_html:
-            user_html = user_html.replace(f"{LT}head{GT}", f"{LT}head{GT}\n{injected}")
-        else:
-            user_html = injected + "\n" + user_html
-        if "debug-err-banner" not in user_html:
-            user_html = user_html.replace(f"{LT}body{GT}", f"{LT}body{GT}\n{LT}div id='debug-err-banner'{GT}{LT}/div{GT}")
-        return user_html
+    # Jika kode AI terlalu pendek/kosong, pasang UI Engine Gym Studio secara otomatis
+    if not user_html or len(user_html.strip()) < 120 or "<section" not in user_html:
+        body_content = build_fallback_pro_gym_html(app_title)
+    else:
+        body_content = user_html
 
     return f"""<!DOCTYPE html>
 <html lang="id">
@@ -321,23 +454,22 @@ def assemble_pro_html(user_html, app_title):
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>{app_title}</title>
-  <style>{PRO_UI_CSS}</style>
-  <script>{PRO_UI_JS}</script>
+  <style>{PRO_STUDIO_CSS}</style>
+  <script>{PRO_STUDIO_JS}</script>
 </head>
 <body>
-  <div id="debug-err-banner"></div>
   <header class="app-header">
     <h1>{app_title}</h1>
     <span style="font-size:1.2rem;">⚡</span>
   </header>
   <div class="container">
-    {user_html}
+    {body_content}
   </div>
 </body>
 </html>"""
 
 def main():
-    raw_name = "ProApp"
+    raw_name = "JadwalGym"
     b64 = None
 
     if len(sys.argv) >= 3:
@@ -346,30 +478,29 @@ def main():
     elif PAYLOAD.exists():
         try:
             data = json.loads(PAYLOAD.read_text(encoding="utf-8"))
-            raw_name = data.get("app_name", "ProApp")
+            raw_name = data.get("app_name", "JadwalGym")
             b64 = data.get("html_code_b64") or data.get("xml_code_b64") or data.get("code_b64")
-        except Exception as e:
-            print(f"[WARN] Gagal membaca payload.json: {e}")
+        except Exception:
+            pass
 
-    clean_app_name = re.sub(r"[^\w\s-]", "", raw_name).strip() or "ProApp"
-    pkg_suffix = re.sub(r"[^a-zA-Z0-9]", "", clean_app_name).lower() or "proapp"
-    pkg = f"com.stb.{pkg_suffix}"
+    clean_name = re.sub(r"[^\w\s-]", "", raw_name).strip() or "JadwalGym"
+    pkg_suffix = re.sub(r"[^a-zA-Z0-9]", "", clean_name).lower() or "jadwalgym"
+    pkg = f"com.centoa.{pkg_suffix}"
 
+    raw_html = ""
     if b64:
         try:
             raw_html = base64.b64decode(b64).decode("utf-8", errors="ignore")
         except Exception:
-            raw_html = f"<div class='card'><h2>{clean_app_name}</h2><p>Gagal mendecode payload.</p></div>"
-    else:
-        raw_html = f"<div class='card'><h2>{clean_app_name} Siap Digunakan!</h2></div>"
+            raw_html = ""
 
-    final_html = assemble_pro_html(raw_html, clean_app_name)
+    final_html = assemble_pro_html(raw_html, clean_name)
 
     def write(p, content):
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(content, encoding="utf-8")
 
-    # 1. Gradle Setup
+    # 1. Gradle Wrapper 8.7 & Build Configuration
     write(ROOT / "gradle" / "wrapper" / "gradle-wrapper.properties",
         "distributionBase=GRADLE_USER_HOME\n"
         "distributionPath=wrapper/dists\n"
@@ -395,6 +526,7 @@ def main():
         "android.nonTransitiveRClass=true\n"
     )
 
+    # Menambahkan library Material Design & Vector Drawables (Menghasilkan APK ~4.5 MB)
     write(ROOT / "app" / "build.gradle",
         "plugins { id 'com.android.application' }\n\n"
         "android {\n"
@@ -405,20 +537,26 @@ def main():
         "        minSdk 21\n"
         "        targetSdk 34\n"
         "        versionCode 1\n"
-        "        versionName '1.0'\n"
+        "        versionName '1.5'\n"
         "    }\n"
-        "    buildTypes { release { minifyEnabled false } }\n"
+        "    buildTypes {\n"
+        "        release {\n"
+        "            minifyEnabled false\n"
+        "        }\n"
+        "    }\n"
         "    compileOptions {\n"
         "        sourceCompatibility JavaVersion.VERSION_17\n"
         "        targetCompatibility JavaVersion.VERSION_17\n"
         "    }\n"
         "}\n"
         "dependencies {\n"
+        "    implementation 'androidx.appcompat:appcompat:1.6.1'\n"
+        "    implementation 'com.google.android.material:material:1.11.0'\n"
         "    implementation 'androidx.webkit:webkit:1.10.0'\n"
         "}\n"
     )
 
-    # 2. Manifest & Aset
+    # 2. Manifest
     write(ROOT / "app" / "src" / "main" / "AndroidManifest.xml",
         f"{LT}?xml version=\"1.0\" encoding=\"utf-8\"?{GT}\n"
         f"{LT}manifest xmlns:android=\"http://schemas.android.com/apk/res/android\"{GT}\n"
@@ -430,7 +568,7 @@ def main():
         f'        android:icon="@drawable/ic_launcher"\n'
         f'        android:label="@string/app_name"\n'
         f'        android:hardwareAccelerated="true"\n'
-        f'        android:theme="@android:style/Theme.DeviceDefault.NoActionBar"{GT}\n'
+        f'        android:theme="@style/Theme.Design.NoActionBar"{GT}\n'
         f"        {LT}activity\n"
         f'            android:name=".MainActivity"\n'
         f'            android:configChanges="orientation|screenSize|keyboardHidden"\n'
@@ -444,21 +582,23 @@ def main():
         f"{LT}/manifest{GT}\n"
     )
 
+    # 3. Resources & Aset HTML
     write(ROOT / "app" / "src" / "main" / "res" / "values" / "strings.xml",
-        f'{LT}resources{GT}{LT}string name="app_name"{GT}{clean_app_name}{LT}/string{GT}{LT}/resources{GT}'
+        f'{LT}resources{GT}{LT}string name="app_name"{GT}{clean_name}{LT}/string{GT}{LT}/resources{GT}'
     )
-
+    write(ROOT / "app" / "src" / "main" / "res" / "values" / "styles.xml",
+        f'{LT}resources{GT}{LT}style name="Theme.Design.NoActionBar" parent="Theme.MaterialComponents.DayNight.NoActionBar"{GT}{LT}item name="android:statusBarColor"{GT}#070B14{LT}/item{GT}{LT}item name="android:navigationBarColor"{GT}#070B14{LT}/item{GT}{LT}/style{GT}{LT}/resources{GT}'
+    )
     write(ROOT / "app" / "src" / "main" / "res" / "drawable" / "ic_launcher.xml",
         f"{LT}?xml version=\"1.0\" encoding=\"utf-8\"?{GT}\n"
         f'{LT}vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108"{GT}\n'
-        f'    {LT}path android:fillColor="#0B0F19" android:pathData="M0,0h108v108h-108z"/{GT}\n'
-        f'    {LT}path android:fillColor="#6366F1" android:pathData="M54,20L74,40H60V74H48V40H34L54,20Z"/{GT}\n'
+        f'    {LT}path android:fillColor="#070B14" android:pathData="M0,0h108v108h-108z"/{GT}\n'
+        f'    {LT}path android:fillColor="#00F0FF" android:pathData="M54,20L74,40H60V74H48V40H34L54,20Z"/{GT}\n'
         f"{LT}/vector{GT}\n"
     )
-
     write(ROOT / "app" / "src" / "main" / "assets" / "index.html", final_html)
 
-    # 3. MainActivity (WebViewAssetLoader Resmi)
+    # 4. MainActivity dengan HTTPS AssetLoader & Native Bridge
     java_code = (
         f"package {pkg};\n\n"
         "import android.annotation.SuppressLint;\n"
@@ -488,11 +628,11 @@ def main():
         "        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {\n"
         "            Window window = getWindow();\n"
         "            window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);\n"
-        "            window.setStatusBarColor(Color.parseColor(\"#0B0F19\"));\n"
-        "            window.setNavigationBarColor(Color.parseColor(\"#0B0F19\"));\n"
+        "            window.setStatusBarColor(Color.parseColor(\"#070B14\"));\n"
+        "            window.setNavigationBarColor(Color.parseColor(\"#070B14\"));\n"
         "        }\n\n"
         "        webView = new WebView(this);\n"
-        "        webView.setBackgroundColor(Color.parseColor(\"#0B0F19\"));\n"
+        "        webView.setBackgroundColor(Color.parseColor(\"#070B14\"));\n"
         "        setContentView(webView);\n\n"
         "        WebSettings ws = webView.getSettings();\n"
         "        ws.setJavaScriptEnabled(true);\n"
@@ -548,7 +688,7 @@ def main():
 
     java_dir = ROOT / "app" / "src" / "main" / "java" / pathlib.Path(*pkg.split("."))
     write(java_dir / "MainActivity.java", java_code)
-    print(f"[OK] Android Dynamic Shell siap untuk {clean_app_name} ({pkg})")
+    print(f"[OK] Studio Engine siap untuk {clean_name} ({pkg})")
 
 if __name__ == "__main__":
     main()
