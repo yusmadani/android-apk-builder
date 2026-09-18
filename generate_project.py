@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Universal Native Shell (Dual Input: CLI Args + Payload JSON)
-- Mengunci Gradle Wrapper ke versi 8.7 (Kompatibel penuh dengan AGP 8.5.2).
-- Menggunakan AndroidX WebViewAssetLoader (HTTPS Domain Resmi).
-- Built-in Pro Mobile UI Kit (Glassmorphism & Haptic) 100% Offline.
+Universal Native Shell (Pro Edition - Built-in Auto Tab Router)
+- Built-in Router: Tab navigasi otomatis berfungsi tanpa mengandalkan script AI.
+- Event Delegation: Anti-macet, klik menu selalu aktif.
+- Safe Storage & Error Banner.
 """
 import base64
 import json
@@ -77,19 +77,32 @@ body {
   gap: 14px;
   flex: 1;
 }
+/* Multi-Tab Views System */
+.view {
+  display: none;
+  animation: fadeIn 0.2s ease-in-out;
+}
+.view.active {
+  display: block;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+/* Cards & Containers */
 .card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: 16px;
   padding: 16px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
-  transition: transform 0.15s ease;
+  margin-bottom: 14px;
 }
-.card:active { transform: scale(0.99); }
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 12px;
+  margin-bottom: 14px;
 }
 .stat-box {
   background: rgba(34, 48, 74, 0.4);
@@ -151,6 +164,7 @@ body {
   gap: 10px;
 }
 .item-row.done { opacity: 0.5; text-decoration: line-through; }
+/* Bottom Navigation Bar */
 .tab-bar {
   position: fixed;
   bottom: 0;
@@ -158,14 +172,14 @@ body {
   right: 0;
   height: calc(62px + var(--safe-bottom));
   padding-bottom: var(--safe-bottom);
-  background: rgba(15, 23, 42, 0.92);
+  background: rgba(15, 23, 42, 0.95);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-top: 1px solid var(--border-color);
   display: flex;
   align-items: center;
   justify-content: space-around;
-  z-index: 100;
+  z-index: 1000;
 }
 .tab-item {
   display: flex;
@@ -182,8 +196,9 @@ body {
   flex: 1;
   height: 100%;
 }
-.tab-item.active { color: #A5B4FC; }
+.tab-item.active { color: #818CF8; font-weight: 700; }
 .tab-item .icon { font-size: 1.25rem; }
+/* Error Banner */
 #debug-err-banner {
   position: fixed;
   top: 0;
@@ -191,14 +206,16 @@ body {
   right: 0;
   background: #DC2626;
   color: white;
-  padding: 10px;
+  padding: 8px 12px;
   font-size: 11px;
   z-index: 999999;
   display: none;
+  word-break: break-all;
 }
 """
 
 PRO_UI_JS = """
+// 1. Tangkap Error JS
 window.onerror = function(msg, url, line) {
   var b = document.getElementById('debug-err-banner');
   if (b) {
@@ -206,6 +223,8 @@ window.onerror = function(msg, url, line) {
     b.innerHTML += '⚠️ <b>JS Error:</b> ' + msg + ' (L:' + line + ')<br>';
   }
 };
+
+// 2. Mesin Database Aman
 window.DB = {
   get: function(key, defaultVal) {
     try {
@@ -220,18 +239,80 @@ window.DB = {
     } catch(e) { return false; }
   }
 };
+
+// 3. Jembatan Native Hardware
 window.Native = {
   toast: function(msg) {
     if (window.Android && window.Android.showToast) { window.Android.showToast(msg); }
   },
   vibrate: function(ms) {
-    if (window.Android && window.Android.vibrate) { window.Android.vibrate(ms || 40); }
+    if (window.Android && window.Android.vibrate) { window.Android.vibrate(ms || 35); }
   }
 };
-document.addEventListener('DOMContentLoaded', function() {
-  document.querySelectorAll('button, .card, .tab-item').forEach(function(el) {
-    el.addEventListener('click', function() { Native.vibrate(25); });
+
+// 4. MESIN NAVIGASI TAB OTOMATIS (BUILT-IN ROUTER)
+window.switchTab = function(targetId) {
+  if (!targetId) return;
+  targetId = targetId.replace('#', '');
+  
+  // Sembunyikan semua tampilan
+  var views = document.querySelectorAll('.view, section[id]');
+  views.forEach(function(v) {
+    v.style.display = 'none';
+    v.classList.remove('active');
   });
+
+  // Tampilkan target (cocokkan targetId langsung atau dengan prefix 'tab-')
+  var target = document.getElementById(targetId) || document.getElementById('tab-' + targetId);
+  if (!target) {
+    var clean = targetId.replace('tab-', '');
+    target = document.getElementById(clean);
+  }
+  if (target) {
+    target.style.display = 'block';
+    target.classList.add('active');
+  }
+
+  // Update tombol aktif di Tab Bar
+  document.querySelectorAll('.tab-item').forEach(function(btn) {
+    var rawAttr = (btn.getAttribute('data-tab') || btn.getAttribute('onclick') || '').toLowerCase();
+    if (rawAttr.indexOf(targetId.toLowerCase()) !== -1) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
+
+  Native.vibrate(30);
+};
+
+// Event Delegation: Tangkap klik menu tab secara global
+document.addEventListener('click', function(e) {
+  var tabBtn = e.target.closest('.tab-item');
+  if (tabBtn) {
+    var target = tabBtn.getAttribute('data-tab');
+    if (!target) {
+      var oc = tabBtn.getAttribute('onclick') || '';
+      var m = oc.match(/switchTab\\(['"]([^'"]+)['"]\\)/);
+      if (m) target = m[1];
+    }
+    if (target) {
+      e.preventDefault();
+      switchTab(target);
+    }
+  } else if (e.target.closest('button, .btn, .card')) {
+    Native.vibrate(20);
+  }
+});
+
+// Inisialisasi tampilan tab pertama saat halaman siap
+document.addEventListener('DOMContentLoaded', function() {
+  setTimeout(function() {
+    var firstView = document.querySelector('.view, section[id]');
+    if (firstView && !document.querySelector('.view.active')) {
+      switchTab(firstView.id);
+    }
+  }, 100);
 });
 """
 
@@ -311,7 +392,7 @@ def main():
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(content, encoding="utf-8")
 
-    # 1. Gradle Files & Gradle Wrapper 8.7 (Wajib untuk AGP 8.5.2)
+    # 1. Gradle Wrapper 8.7 & Build Configuration
     write(
         ROOT / "gradle" / "wrapper" / "gradle-wrapper.properties",
         (
