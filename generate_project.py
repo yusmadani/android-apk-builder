@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """
 Generate Android native project (Java + XML) dari payload.json.
-Versi Stabil Penuh:
+Fitur:
+- Auto-clean karakter illegal Unicode (U+2216 / ∖, zero-width space, smart quotes).
+- Auto-sync nama variabel WebView (∖view / view / webView).
 - Auto-decode Base64 STB (xml_code_b64 & java_code_b64).
 - Auto-fix typo WebView (private WebView.webView -> private WebView webView).
 - Auto-fix titik liar ekspresi assignment (=. -> = ).
@@ -301,29 +303,52 @@ def sanitize_java(raw_java, pkg):
 
     java = sanitize_java_strings(java)
 
-    # 1. Koreksi Kesalahan Sintaks Deklarasi Variabel WebView dari AI
-    # Mengubah "private WebView.webView;" menjadi "private WebView webView;"
+    # 1. Bersihkan karakter Unicode tersembunyi/illegal (U+2216, zero-width, smart quotes)
+    java = java.replace('\u200b', '')   # Zero-width space
+    java = java.replace('\ufeff', '')   # BOM
+    java = java.replace('\u00a0', ' ')  # Non-breaking space
+    java = java.replace('“', '"').replace('”', '"')
+    java = java.replace('‘', "'").replace('’', "'")
+
+    # 2. Koreksi variabel yang diawali karakter illegal \u2216 (∖) atau backslash
+    java = re.sub(r'[\u2216\\]+([a-zA-Z_])', r'\1', java)
+    java = java.replace('\u2216', '')
+
+    # 3. Koreksi Typo Deklarasi Variabel dari AI (private WebView.webView; -> private WebView webView;)
     java = re.sub(r'\b(private|protected|public)\s+([A-Z]\w*)\.([a-z]\w*)\s*;', r'\1 \2 \3;', java)
 
-    # 2. Koreksi Titik Liar Pada Ekspresi Penugasan
-    # Mengubah "=.webView" menjadi "= webView" atau "= .get" menjadi "= get"
+    # 4. Koreksi Titik Liar Pada Ekspresi Penugasan (=.webView -> = webView)
     java = re.sub(r'=\s*\.\s*([a-zA-Z_])', r'= \1', java)
 
-    # 3. Koreksi Typo Method Listener CheckBox
+    # 5. Sinkronisasi nama variabel WebView antara deklarasi dan penggunaan
+    if "private WebView webView;" in java or "WebView webView;" in java:
+        java = re.sub(r'\bview\s*=\s*findViewById', 'webView = findViewById', java)
+        java = re.sub(r'\bview\.(getSettings|loadUrl|setWebViewClient|setWebChromeClient)', r'webView.\1', java)
+    elif "private WebView view;" in java or "WebView view;" in java:
+        java = re.sub(r'\bwebView\s*=\s*findViewById', 'view = findViewById', java)
+        java = re.sub(r'\bwebView\.(getSettings|loadUrl|setWebViewClient|setWebChromeClient)', r'view.\1', java)
+    elif "WebView" in java:
+        # Jika ada pemanggilan WebView tapi lupa dideklarasikan sebagai field
+        if re.search(r'\b(webView|view)\s*=\s*findViewById', java):
+            java = re.sub(r'(class\s+\w+\s+extends\s+\w+\s*\{)', r'\1\n    private WebView webView;', java)
+            java = re.sub(r'\bview\s*=\s*findViewById', 'webView = findViewById', java)
+            java = re.sub(r'\bview\.(getSettings|loadUrl|setWebViewClient|setWebChromeClient)', r'webView.\1', java)
+
+    # 6. Koreksi Typo Method Listener CheckBox
     java = re.sub(r'setOnbuttonCheckedChangeListener', 'setOnCheckedChangeListener', java, flags=re.IGNORECASE)
     java = re.sub(r'setOnCheckChangeListener', 'setOnCheckedChangeListener', java, flags=re.IGNORECASE)
 
-    # 4. Sinkronkan Nama Package
+    # 7. Sinkronkan Nama Package
     if re.search(r"package\s+[\w\.]+;", java):
         java = re.sub(r"package\s+[\w\.]+;", f"package {pkg};", java)
     else:
         java = f"package {pkg};\n\n" + java
 
-    # 5. Normalisasi Activity Turunan
+    # 8. Normalisasi Activity Turunan
     java = re.sub(r"extends\s+AppCompatActivity", "extends Activity", java)
     java = re.sub(r"import\s+androidx\.appcompat\.app\.AppCompatActivity;", "", java)
 
-    # 6. Injeksi Import Android Esensial & WebView
+    # 9. Injeksi Import Android Esensial & WebView
     essential_imports = [
         "import android.app.Activity;",
         "import android.os.Bundle;",
