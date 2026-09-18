@@ -79,25 +79,21 @@ jobs:
           CHAT_ID="${{ github.event.client_payload.chat_id || github.event.inputs.chat_id }}"
           BOT_TOKEN="8531311195:AAEzEUdl4EkLCf57s2gFZB0lDYCQGZaXDDk"
           APP_NAME="${{ github.event.client_payload.app_name || github.event.inputs.app_name || 'ProApp' }}"
-          
-          APK_PATH=$(find android/app/build/outputs/apk/release -name "*.apk" | head -n 1)
-          
-          if [ -z "$APK_PATH" ]; then
-            APK_PATH=$(find android/app/build/outputs/apk -name "*.apk" | head -n 1)
-          fi
 
-          if [ -f "$APK_PATH" ]; then
+          APK_PATH=$(find android/app/build/outputs/apk -name "*.apk" | head -n 1)
+
+          if [ -n "$APK_PATH" ] && [ -f "$APK_PATH" ]; then
             FILE_SIZE=$(du -h "$APK_PATH" | cut -f1)
             CAPTION="🚀 *React Native Hermes APK Selesai!*%0A%0A📱 *Aplikasi:* ${APP_NAME}%0A⚡ *Engine:* Meta Hermes AOT Bytecode%0A📦 *Ukuran:* ${FILE_SIZE}%0A💎 *Arsitektur:* 100% Native View & GPU Rendered"
             
-            curl -F chat_id="$CHAT_ID" \
-                 -F document=@"$APK_PATH" \
-                 -F caption="$CAPTION" \
-                 -F parse_mode="Markdown" \
-                 "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument"
+            curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" \
+              -F chat_id="${CHAT_ID}" \
+              -F document=@"${APK_PATH}" \
+              -F caption="${CAPTION}" \
+              -F parse_mode="Markdown"
           else
-            curl -d chat_id="$CHAT_ID" \
-                 -d text="❌ Gagal menemukan file APK hasil kompilasi." \
-                 "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage"
+            curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+              -d chat_id="${CHAT_ID}" \
+              -d text="❌ Gagal menemukan file APK hasil kompilasi."
             exit 1
           fi
