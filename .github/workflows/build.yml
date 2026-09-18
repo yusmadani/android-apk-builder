@@ -1,19 +1,12 @@
-name: Build Dynamic Android APK
+name: Build Dynamic APK
 
 on:
-  workflow_dispatch:
-    inputs:
-      test_app_name:
-        description: 'Nama Aplikasi untuk Tes Manual'
-        required: false
-        default: 'GymTrackerTest'
   repository_dispatch:
     types: [build_dynamic_apk]
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -24,175 +17,37 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # Android SDK sudah ada di runner ubuntu-latest, cukup setujui lisensinya
-      - name: Accept Android SDK Licenses
-        run: |
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
-
-      - name: Set up Python 3.10
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: Install Python Dependencies
-        run: pip install pillow requests --quiet
-
-      # 1. Bersihkan sisa file kompilasi lama
-      - name: Clean Old Build Files
-        run: rm -rf app project build_output.log payload.json
-
-      # 2. Siapkan payload.json untuk generator
-      - name: Create payload.json
-        shell: python
-        env:
-          PAYLOAD_DATA: ${{ toJson(github.event.client_payload) }}
-          MANUAL_APP_NAME: ${{ github.event.inputs.test_app_name }}
+      - name: Prepare Payload & Run Generator
         run: |
-          import os, json
+          echo '${{ toJson(github.event.client_payload) }}' > payload.json
+          python generate_project.py
 
-          raw = os.environ.get("PAYLOAD_DATA", "")
-          data = {}
-          try:
-              if raw and raw != "null":
-                  data = json.loads(raw)
-          except Exception as e:
-              print(f"Error parsing JSON: {e}")
+      - name: Grant Execute Permission to Gradle
+        run: chmod +x gradlew || gradle wrapper
 
-          if not data:
-              manual_name = os.environ.get("MANUAL_APP_NAME", "DynamicApp")
-              data = {
-                  "app_name": manual_name,
-                  "activity_main_xml": "",
-                  "main_activity_java": ""
-              }
-
-          with open("payload.json", "w", encoding="utf-8") as f:
-              json.dump(data, f, ensure_ascii=False, indent=2)
-
-      # 3. Jalankan generator proyek Android
-      - name: Run Project Generator
-        run: |
-          if [ -f "generate_project.py" ]; then
-            python3 generate_project.py
-          elif [ -f ".github/workflows/generate_project.py" ]; then
-            python3 .github/workflows/generate_project.py
-          else
-            echo "ERROR: generate_project.py tidak ditemukan!"
-            exit 1
-          fi
-
-      # 4. Validasi visual resource di log runner sebelum kompilasi
-      - name: Verify Generated Resources
-        run: |
-          echo "=== CEK STRINGS.XML ==="
-          cat app/src/main/res/values/strings.xml || true
-          echo ""
-          echo "=== CEK COLORS.XML ==="
-          cat app/src/main/res/values/colors.xml || true
-          echo ""
-          echo "=== CEK MANIFEST ==="
-          head -n 10 app/src/main/AndroidManifest.xml || true
-          echo "========================"
-
-      # 5. Kompilasi APK dengan Gradle
       - name: Build APK with Gradle
-        run: |
-          gradle wrapper --gradle-version 8.7
-          chmod +x gradlew
-          set -o pipefail
-          ./gradlew assembleDebug -Pandroid.useAndroidX=true -Pandroid.enableJetifier=true --stacktrace 2>&1 | tee build_output.log
+        run: ./gradlew assembleDebug --stacktrace
 
-      # 6. Simpan APK ke halaman GitHub Actions (Opsional, agar bisa di-download dari web)
-      - name: Upload APK as Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ github.event.client_payload.app_name || github.event.inputs.test_app_name || 'app-debug' }}-apk
-          path: app/build/outputs/apk/debug/*.apk
-          retention-days: 7
-
-      # 7. Kirim APK ke Telegram jika sukses
       - name: Send APK to Telegram
-        if: success()
-        shell: python
-        env:
-          CHAT_ID: ${{ github.event.client_payload.chat_id }}
-          BOT_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          APP_TITLE: ${{ github.event.client_payload.app_name || github.event.inputs.test_app_name }}
         run: |
-          import os, glob, re, requests
+          CHAT_ID="${{ github.event.client_payload.chat_id }}"
+          APP_NAME="${{ github.event.client_payload.app_name }}"
+          BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
+          APK_PATH=$(find app/build/outputs/apk/debug/ -name "*.apk" | head -n 1)
 
-          token = os.environ.get("BOT_TOKEN", "").strip()
-          chat_id = os.environ.get("CHAT_ID", "").strip()
-          title = os.environ.get("APP_TITLE", "Aplikasi").strip() or "Aplikasi"
-
-          if not token or not chat_id:
-              print("Pengiriman Telegram dilewati (uji manual web / token kosong).")
-              exit(0)
-
-          apk_files = glob.glob("app/build/outputs/apk/debug/*.apk")
-          if not apk_files:
-              print("ERROR: File APK tidak ditemukan di app/build/outputs/apk/debug/!")
-              exit(1)
-
-          original_apk = apk_files[0]
-          safe_name = re.sub(r'[^a-zA-Z0-9_-]', '_', title).strip('_') or "DynamicApp"
-          new_file_name = f"{safe_name}.apk"
-          new_apk_path = os.path.join(os.path.dirname(original_apk), new_file_name)
-
-          if original_apk != new_apk_path:
-              os.rename(original_apk, new_apk_path)
-
-          url = f"https://api.telegram.org/bot{token}/sendDocument"
-          payload = {
-              "chat_id": chat_id,
-              "caption": f"✅ *{title}* berhasil dikompilasi!\n📁 File: `{new_file_name}`\n🎨 Versi stabil bebas force-close.",
-              "parse_mode": "Markdown"
-          }
-
-          with open(new_apk_path, "rb") as f:
-              files = {"document": (new_file_name, f, "application/vnd.android.package-archive")}
-              r = requests.post(url, data=payload, files=files, timeout=90)
-
-          if not r.json().get("ok"):
-              print(f"Gagal mengirim ke Telegram: {r.text}")
-              exit(1)
-
-          print(f"✅ APK {new_file_name} berhasil dikirim ke Telegram!")
-
-      # 8. Kirim pesan notifikasi error ke Telegram jika build gagal
-      - name: Notify Failure to Telegram
-        if: failure()
-        shell: python
-        env:
-          CHAT_ID: ${{ github.event.client_payload.chat_id }}
-          BOT_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-        run: |
-          import os, requests
-
-          token = os.environ.get("BOT_TOKEN", "").strip()
-          chat_id = os.environ.get("CHAT_ID", "").strip()
-
-          if not token or not chat_id:
-              exit(0)
-
-          error_lines = []
-          if os.path.exists("build_output.log"):
-              with open("build_output.log", "r", encoding="utf-8", errors="ignore") as f:
-                  lines = f.readlines()
-
-              for idx, line in enumerate(lines):
-                  line_lower = line.lower()
-                  if "error:" in line_lower or "failed" in line_lower or "exception:" in line_lower:
-                      start = max(0, idx - 1)
-                      end = min(len(lines), idx + 4)
-                      for l in lines[start:end]:
-                          if l.strip() and l not in error_lines and "org.gradle." not in l:
-                              error_lines.append(l.strip())
-
-          error_snippet = "\n".join(error_lines[:15]) if error_lines else "Cek tab GitHub Actions untuk detail error."
-          msg = f"❌ *Kompilasi APK Gagal!*\n\n*Detail Error:*\n```\n{error_snippet[:3500]}\n```"
-          requests.post(f"https://api.telegram.org/bot{token}/sendMessage", data={
-              "chat_id": chat_id,
-              "text": msg,
-              "parse_mode": "Markdown"
-          })
+          if [ -f "$APK_PATH" ]; then
+            curl -F chat_id="$CHAT_ID" \
+                 -F document=@"$APK_PATH" \
+                 -F caption="✅ *Aplikasi Selesai!*%0A📱 Nama: $APP_NAME%0A🎉 Berhasil dirakit via Universal Native Shell." \
+                 -F parse_mode="Markdown" \
+                 https://api.telegram.org/bot$BOT_TOKEN/sendDocument
+          else
+            curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" \
+                 -d chat_id="$CHAT_ID" \
+                 -d text="❌ Gagal menemukan file APK hasil kompilasi."
+          fi
