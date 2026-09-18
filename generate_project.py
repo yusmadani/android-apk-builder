@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
 """
 Generate Android native project (Java + XML) dari payload.json.
-100% Kebal Browser HTML Stripping: Nol simbol sudut mentah (< dan >).
-Fitur: Auto-generate ids.xml, Auto-fix typo listener CheckBox,
-Auto-decode Base64 STB, Package ID dinamis unik.
+Versi Stabil Penuh:
+- Auto-decode Base64 STB (xml_code_b64 & java_code_b64).
+- Auto-fix typo WebView (private WebView.webView -> private WebView webView).
+- Auto-fix titik liar ekspresi assignment (=. -> = ).
+- Auto-inject import Android WebView & WebSettings.
+- Manifest dengan izin INTERNET & Cleartext Traffic.
+- Auto-fix listener CheckBox (setOnbuttonCheckedChangeListener).
+- Auto-generate ids.xml (anti-cannot find symbol).
+- 100% bebas karakter sudut mentah (kebal pemotongan clipboard/browser).
 """
 import base64
 import json
@@ -67,53 +73,78 @@ def get_code_payload(d, b64_keys, plain_keys):
     return ""
 
 
-# Template Resource via Base64 Murni
-FALLBACK_LAYOUT = base64.b64decode(
-    "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPExpbmVhckxheW91dCB4bWxuczphbmRyb2lkPSJodHRwOi8vc2No"
-    "ZW1hcy5hbmRyb2lkLmNvbS9hcGsvcmVzL2FuZHJvaWQiCiAgICBhbmRyb2lkOmxheW91dF93aWR0aD0ibWF0Y2hfcGFyZW50IgogICAg"
-    "YW5kcm9pZDpsYXlvdXRfaGVpZ2h0PSJtYXRjaF9wYXJlbnQiCiAgICBhbmRyb2lkOm9yaWVudGF0aW9uPSJ2ZXJ0aWNhbCIKICAgIGFu"
-    "ZHJvaWQ6Z3Jhdml0eT0iY2VudGVyIgogICAgYW5kcm9pZDpwYWRkaW5nPSIyNGRwIj4KICAgIDxUZXh0VmlldwogICAgICAgIGFuZHJv"
-    "aWQ6aWQ9IkAraWQvdHZUaXRsZSIKICAgICAgICBhbmRyb2lkOmxheW91dF93aWR0aD0id3JhcF9jb250ZW50IgogICAgICAgIGFuZHJv"
-    "aWQ6bGF5b3V0X2hlaWdodD0id3JhcF9jb250ZW50IgogICAgICAgIGFuZHJvaWQ6dGV4dD0iQHN0cmluZy9hcHBfbmFtZSIKICAgICAg"
-    "ICBhbmRyb2lkOnRleHRTaXplPSIyMnNwIgogICAgICAgIGFuZHJvaWQ6dGV4dFN0eWxlPSJib2xkIiAvPgoKICAgIDxUZXh0Vmlldwog"
-    "ICAgICAgIGFuZHJvaWQ6aWQ9IkAraWQvdHZNZXNzYWdlIgogICAgICAgIGFuZHJvaWQ6bGF5b3V0X3dpZHRoPSJ3cmFwX2NvbnRlbnQi"
-    "CiAgICAgICAgYW5kcm9pZDpsYXlvdXRfaGVpZ2h0PSJ3cmFwX2NvbnRlbnQiCiAgICAgICAgYW5kcm9pZDpsYXlvdXRfbWFyZ2luVG9w"
-    "PSIxMmRwIgogICAgICAgIGFuZHJvaWQ6dGV4dD0iQXBsaWthc2kgYmVyaGFzaWwgZGliYW5ndW4uIgogICAgICAgIGFuZHJvaWQ6dGV4"
-    "dFNpemU9IjE2c3AiIC8+CjwvTGluZWFyTGF5b3V0Pgo="
-).decode("utf-8")
+# Template Resource Terenkapsulasi (Bebas Karakter Sudut Mentah)
+FALLBACK_LAYOUT = (
+    f"{LT}?xml version=\"1.0\" encoding=\"utf-8\"?{GT}\n"
+    f"{LT}LinearLayout xmlns:android=\"http://schemas.android.com/apk/res/android\"\n"
+    f"    android:layout_width=\"match_parent\"\n"
+    f"    android:layout_height=\"match_parent\"\n"
+    f"    android:orientation=\"vertical\"\n"
+    f"    android:gravity=\"center\"\n"
+    f"    android:padding=\"24dp\"{GT}\n\n"
+    f"    {LT}TextView\n"
+    f"        android:id=\"@+id/tvTitle\"\n"
+    f"        android:layout_width=\"wrap_content\"\n"
+    f"        android:layout_height=\"wrap_content\"\n"
+    f"        android:text=\"@string/app_name\"\n"
+    f"        android:textSize=\"22sp\"\n"
+    f"        android:textStyle=\"bold\" /{GT}\n\n"
+    f"    {LT}TextView\n"
+    f"        android:id=\"@+id/tvMessage\"\n"
+    f"        android:layout_width=\"wrap_content\"\n"
+    f"        android:layout_height=\"wrap_content\"\n"
+    f"        android:layout_marginTop=\"12dp\"\n"
+    f"        android:text=\"Aplikasi berhasil dibangun.\"\n"
+    f"        android:textSize=\"16sp\" /{GT}\n\n"
+    f"{LT}/LinearLayout{GT}\n"
+)
 
-MANIFEST_TEMPLATE = base64.b64decode(
-    "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPG1hbmlmZXN0IHhtbG5zOmFuZHJvaWQ9Imh0dHA6Ly9zY2hlbWFz"
-    "LmFuZHJvaWQuY29tL2Fway9yZXMvYW5kcm9pZCI+CiAgICA8YXBwbGljYXRpb24KICAgICAgICBhbmRyb2lkOmFsbG93QmFja3VwPSJ0"
-    "cnVlIgogICAgICAgIGFuZHJvaWQ6aWNvbj0iQGRyYXdhYmxlL2ljX2xhdW5jaGVyIgogICAgICAgIGFuZHJvaWQ6bGFiZWw9IkBzdHJp"
-    "bmcvYXBwX25hbWUiCiAgICAgICAgYW5kcm9pZDpzdXBwb3J0c1J0bD0idHJ1ZSIKICAgICAgICBhbmRyb2lkOnRoZW1lPSJAYW5kcm9p"
-    "ZDpzdHlsZS9UaGVtZS5EZXZpY2VEZWZhdWx0Lk5vQWN0aW9uQmFyIj4KICAgICAgICA8YWN0aXZpdHkKICAgICAgICAgICAgYW5kcm9p"
-    "ZDpuYW1lPSIuTWFpbkFjdGl2aXR5IgogICAgICAgICAgICBhbmRyb2lkOmV4cG9ydGVkPSJ0cnVlIj4KICAgICAgICAgICAgPGludGVu"
-    "dC1maWx0ZXI+CiAgICAgICAgICAgICAgICA8YWN0aW9uIGFuZHJvaWQ6bmFtZT0iYW5kcm9pZC5pbnRlbnQuYWN0aW9uLk1BSU4iIC8+"
-    "CiAgICAgICAgICAgICAgICA8Y2F0ZWdvcnkgYW5kcm9pZDpuYW1lPSJhbmRyb2lkLmludGVudC5jYXRlZ29yeS5MQVVOQ0hFUiIgLz4K"
-    "ICAgICAgICAgICAgPC9pbnRlbnQtZmlsdGVyPgogICAgICAgIDwvYWN0aXZpdHk+CiAgICA8L2FwcGxpY2F0aW9uPgo8L21hbmlmZXN0"
-    "Pgo="
-).decode("utf-8")
+MANIFEST_TEMPLATE = (
+    f"{LT}?xml version=\"1.0\" encoding=\"utf-8\"?{GT}\n"
+    f"{LT}manifest xmlns:android=\"http://schemas.android.com/apk/res/android\"{GT}\n"
+    f"    {LT}uses-permission android:name=\"android.permission.INTERNET\" /{GT}\n"
+    f"    {LT}application\n"
+    f"        android:allowBackup=\"true\"\n"
+    f"        android:icon=\"@drawable/ic_launcher\"\n"
+    f"        android:label=\"@string/app_name\"\n"
+    f"        android:supportsRtl=\"true\"\n"
+    f"        android:usesCleartextTraffic=\"true\"\n"
+    f"        android:theme=\"@android:style/Theme.DeviceDefault.NoActionBar\"{GT}\n"
+    f"        {LT}activity\n"
+    f"            android:name=\".MainActivity\"\n"
+    f"            android:exported=\"true\"{GT}\n"
+    f"            {LT}intent-filter{GT}\n"
+    f"                {LT}action android:name=\"android.intent.action.MAIN\" /{GT}\n"
+    f"                {LT}category android:name=\"android.intent.category.LAUNCHER\" /{GT}\n"
+    f"            {LT}/intent-filter{GT}\n"
+    f"        {LT}/activity{GT}\n"
+    f"    {LT}/application{GT}\n"
+    f"{LT}/manifest{GT}\n"
+)
 
-# 8 digit hex: #FF000000 dan #FFFFFFFF
-COLORS_XML = base64.b64decode(
-    "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPHJlc291cmNlcz4KICAgIDxjb2xvciBuYW1lPSJibGFjayI+I0ZG"
-    "MDAwMDAwPC9jb2xvcj4KICAgIDxjb2xvciBuYW1lPSJ3aGl0ZSI+I0ZGRkZGRkZGPC9jb2xvcj4KPC9yZXNvdXJjZXM+Cg=="
-).decode("utf-8")
+COLORS_XML = (
+    f"{LT}?xml version=\"1.0\" encoding=\"utf-8\"?{GT}\n"
+    f"{LT}resources{GT}\n"
+    f"    {LT}color name=\"black\"{GT}#FF000000{LT}/color{GT}\n"
+    f"    {LT}color name=\"white\"{GT}#FFFFFFFF{LT}/color{GT}\n"
+    f"{LT}/resources{GT}\n"
+)
 
-IC_LAUNCHER_XML = base64.b64decode(
-    "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPHZlY3RvciB4bWxuczphbmRyb2lkPSJodHRwOi8vc2NoZW1hcy5h"
-    "bmRyb2lkLmNvbS9hcGsvcmVzL2FuZHJvaWQiCiAgICBhbmRyb2lkOndpZHRoPSIxMDhkcCIKICAgIGFuZHJvaWQ6aGVpZ2h0PSIxMDhk"
-    "cCIKICAgIGFuZHJvaWQ6dmlld3BvcnRXaWR0aD0iMTA4IgogICAgYW5kcm9pZDp2aWV3cG9ydEhlaWdodD0iMTA4Ij4KICAgIDxwYXRo"
-    "CiAgICAgICAgYW5kcm9pZDpmaWxsQ29sb3I9IiMwMDg1NzciCiAgICAgICAgYW5kcm9pZDpwYXRoRGF0YT0iTTAsMGgxMDh2MTA4aC0x"
-    "MDh6Ii8+CiAgICA8cGF0aAogICAgICAgIGFuZHJvaWQ6ZmlsbENvbG9yPSIjRkZGRkZGIgogICAgICAgIGFuZHJvaWQ6cGF0aERhdGE9"
-    "Ik01NCwyMEw3NCw0MEg2MFY3NEg0OFY0MEgzNEw1NCwyMFoiLz4KPC92ZWN0b3I+Cg=="
-).decode("utf-8")
-
-STRINGS_XML_TEMPLATE = base64.b64decode(
-    "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPHJlc291cmNlcz4KICAgIDxzdHJpbmcgbmFtZT0iYXBwX25hbWUi"
-    "Pl9fQVBQX05BTUVfXzwvc3RyaW5nPgo8L3Jlc291cmNlcz4K"
-).decode("utf-8")
+IC_LAUNCHER_XML = (
+    f"{LT}?xml version=\"1.0\" encoding=\"utf-8\"?{GT}\n"
+    f"{LT}vector xmlns:android=\"http://schemas.android.com/apk/res/android\"\n"
+    f"    android:width=\"108dp\"\n"
+    f"    android:height=\"108dp\"\n"
+    f"    android:viewportWidth=\"108\"\n"
+    f"    android:viewportHeight=\"108\"{GT}\n"
+    f"    {LT}path\n"
+    f"        android:fillColor=\"#008577\"\n"
+    f"        android:pathData=\"M0,0h108v108h-108z\"/{GT}\n"
+    f"    {LT}path\n"
+    f"        android:fillColor=\"#FFFFFF\"\n"
+    f"        android:pathData=\"M54,20L74,40H60V74H48V40H34L54,20Z\"/{GT}\n"
+    f"{LT}/vector{GT}\n"
+)
 
 
 def strip_code_fences(s):
@@ -160,10 +191,10 @@ def ensure_root_xml(xml):
     if not xml:
         return ""
     xml = xml.lstrip("\ufeff \t\r\n")
-    decl_prefix = chr(60) + "?xml"
+    decl_prefix = f"{LT}?xml"
     if not xml.startswith(decl_prefix):
-        xml_decl = base64.b64decode("PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4K").decode("utf-8")
-        xml = xml_decl + xml
+        header = f"{LT}?xml version=\"1.0\" encoding=\"utf-8\"?{GT}\n"
+        xml = header + xml
     return xml
 
 
@@ -270,24 +301,42 @@ def sanitize_java(raw_java, pkg):
 
     java = sanitize_java_strings(java)
 
-    # Perbaikan otomatis typo listener CheckBox yang sering digenerate AI
+    # 1. Koreksi Kesalahan Sintaks Deklarasi Variabel WebView dari AI
+    # Mengubah "private WebView.webView;" menjadi "private WebView webView;"
+    java = re.sub(r'\b(private|protected|public)\s+([A-Z]\w*)\.([a-z]\w*)\s*;', r'\1 \2 \3;', java)
+
+    # 2. Koreksi Titik Liar Pada Ekspresi Penugasan
+    # Mengubah "=.webView" menjadi "= webView" atau "= .get" menjadi "= get"
+    java = re.sub(r'=\s*\.\s*([a-zA-Z_])', r'= \1', java)
+
+    # 3. Koreksi Typo Method Listener CheckBox
     java = re.sub(r'setOnbuttonCheckedChangeListener', 'setOnCheckedChangeListener', java, flags=re.IGNORECASE)
     java = re.sub(r'setOnCheckChangeListener', 'setOnCheckedChangeListener', java, flags=re.IGNORECASE)
 
+    # 4. Sinkronkan Nama Package
     if re.search(r"package\s+[\w\.]+;", java):
         java = re.sub(r"package\s+[\w\.]+;", f"package {pkg};", java)
     else:
         java = f"package {pkg};\n\n" + java
 
+    # 5. Normalisasi Activity Turunan
     java = re.sub(r"extends\s+AppCompatActivity", "extends Activity", java)
     java = re.sub(r"import\s+androidx\.appcompat\.app\.AppCompatActivity;", "", java)
 
+    # 6. Injeksi Import Android Esensial & WebView
     essential_imports = [
         "import android.app.Activity;",
         "import android.os.Bundle;",
         "import android.view.View;",
         "import android.widget.*;",
     ]
+    if "WebView" in java:
+        essential_imports.extend([
+            "import android.webkit.WebView;",
+            "import android.webkit.WebSettings;",
+            "import android.webkit.WebViewClient;",
+        ])
+
     for imp in essential_imports:
         if imp not in java:
             java = re.sub(r"(package\s+[\w\.]+;\n*)", r"\1" + imp + "\n", java)
@@ -413,17 +462,22 @@ def main():
         "}\n"
     ))
 
-    # 7. AndroidManifest.xml
+    # 7. AndroidManifest.xml (Termasuk izin Internet & Cleartext Traffic)
     write(ROOT / "app" / "src" / "main" / "AndroidManifest.xml", MANIFEST_TEMPLATE)
 
     # 8. Resources
-    strings_content = STRINGS_XML_TEMPLATE.replace("__APP_NAME__", clean_app_name)
+    strings_content = (
+        f"{LT}?xml version=\"1.0\" encoding=\"utf-8\"?{GT}\n"
+        f"{LT}resources{GT}\n"
+        f"    {LT}string name=\"app_name\"{GT}{clean_app_name}{LT}/string{GT}\n"
+        f"{LT}/resources{GT}\n"
+    )
     write(ROOT / "app" / "src" / "main" / "res" / "values" / "strings.xml", strings_content)
     write(ROOT / "app" / "src" / "main" / "res" / "values" / "colors.xml", COLORS_XML)
     write(ROOT / "app" / "src" / "main" / "res" / "drawable" / "ic_launcher.xml", IC_LAUNCHER_XML)
     write(ROOT / "app" / "src" / "main" / "res" / "layout" / "activity_main.xml", layout_xml)
 
-    # 9. Auto-generate ids.xml (Menjamin compiler selalu mengenali R.id.* yang dipanggil Java)
+    # 9. Auto-generate ids.xml (Mencegah error AAPT/javac symbol missing)
     java_ids = set(re.findall(r'R\.id\.([a-zA-Z0-9_]+)', main_java))
     if java_ids:
         item_rows = [f'    {LT}item name="{i}" type="id"/{GT}' for i in sorted(java_ids)]
