@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Universal Native Shell Generator (Offline-First Edition)
-- WebView background diset #0F172A (anti-flash putih).
-- Izin universal & file access dibuka penuh untuk mencegah pemblokiran lokal.
-- Hardware Acceleration diaktifkan untuk rendering 60 FPS.
+Universal Native Shell Generator (Auto-Fix LocalStorage & Anti-Blank)
+- Menggunakan loadDataWithBaseURL (membuka kunci localStorage di Android).
+- Injeksi otomatis Safe-Storage Polyfill & Visual JS Error Banner.
+- Zero Javac / AAPT Error.
 """
 import base64
 import json
@@ -19,6 +19,56 @@ LT = chr(60)
 GT = chr(62)
 
 
+def clean_html(code):
+    if not code:
+        return ""
+    code = code.strip()
+    code = re.sub(r"^```(?:html|xml)?\s*", "", code, flags=re.IGNORECASE)
+    code = re.sub(r"\s*```$", "", code)
+    return code.strip()
+
+
+def inject_safety_layer(html):
+    """Menyuntikkan pelindung LocalStorage dan OnError Banner agar tidak pernah blank."""
+    safety_script = f"""{LT}script{GT}
+// 1. Tangkap error JS dan tampilkan banner merah di layar jika script bermasalah
+window.onerror = function(msg, url, line) {{
+    var b = document.getElementById('debug-err-banner');
+    if (!b) {{
+        b = document.createElement('div');
+        b.id = 'debug-err-banner';
+        b.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#dc2626;color:#fff;padding:12px;z-index:999999;font-size:12px;font-family:sans-serif;box-shadow:0 4px 6px rgba(0,0,0,0.3);word-break:break-all;';
+        if (document.body) {{ document.body.prepend(b); }}
+        else {{ document.documentElement.appendChild(b); }}
+    }}
+    b.innerHTML += '⚠️ <b>JS Error:</b> ' + msg + ' (Baris: ' + line + ')<br>';
+}};
+
+// 2. Safe LocalStorage (Mencegah crash jika Android memblokir storage)
+try {{
+    var _testKey = '__storage_test__';
+    window.localStorage.setItem(_testKey, _testKey);
+    window.localStorage.removeItem(_testKey);
+}} catch (e) {{
+    console.warn('LocalStorage diblokir, mengaktifkan in-memory fallback');
+    var _mem = {{}};
+    window.localStorage = {{
+        getItem: function(k) {{ return _mem.hasOwnProperty(k) ? _mem[k] : null; }},
+        setItem: function(k, v) {{ _mem[k] = String(v); }},
+        removeItem: function(k) {{ delete _mem[k]; }},
+        clear: function() {{ _mem = {{}}; }}
+    }};
+}}
+{LT}/script{GT}"""
+
+    # Sisipkan tepat setelah tag <head> atau di paling atas dokumen
+    if f"{LT}head{GT}" in html:
+        return html.replace(f"{LT}head{GT}", f"{LT}head{GT}\n{safety_script}")
+    elif f"{LT}html{GT}" in html:
+        return html.replace(f"{LT}html{GT}", f"{LT}html{GT}\n{safety_script}")
+    return safety_script + "\n" + html
+
+
 def main():
     if not PAYLOAD.exists():
         sys.exit("[FATAL] payload.json tidak ada!")
@@ -31,27 +81,31 @@ def main():
     )
     pkg = f"com.stb.{pkg_suffix}"
 
-    # 1. Ambil kode HTML dari Base64 STB
+    # Baca HTML dari Base64
     b64 = (
         data.get("html_code_b64")
         or data.get("xml_code_b64")
         or data.get("code_b64")
     )
     if b64:
-        html = base64.b64decode(b64).decode("utf-8", errors="ignore")
+        raw_html = base64.b64decode(b64).decode("utf-8", errors="ignore")
+        final_html = clean_html(raw_html)
     else:
-        html = (
-            f"<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1.0'>"
-            f"<style>body{{background:#0f172a;color:#fff;font-family:sans-serif;display:flex;align-items:center;"
-            f"justify-content:center;height:100vh;margin:0;}}</style></head>"
-            f"<body><h2>{clean_app_name} Siap!</h2></body></html>"
+        final_html = (
+            f"<!DOCTYPE html>{LT}html{GT}{LT}head{GT}{LT}meta name='viewport' content='width=device-width, initial-scale=1.0'{GT}"
+            f"{LT}style{GT}body{{background:#0f172a;color:#fff;font-family:sans-serif;display:flex;align-items:center;"
+            f"justify-content:center;height:100vh;margin:0;}}{LT}/style{GT}{LT}/head{GT}"
+            f"{LT}body{GT}{LT}h2{GT}{clean_app_name} Siap!{LT}/h2{GT}{LT}/body{GT}{LT}/html{GT}"
         )
+
+    # Injeksi proteksi error & localStorage
+    final_html = inject_safety_layer(final_html)
 
     def write(p, content):
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(content, encoding="utf-8")
 
-    # 2. Gradle Files
+    # 1. Gradle Files
     write(
         ROOT / "settings.gradle",
         (
@@ -100,7 +154,7 @@ def main():
         ),
     )
 
-    # 3. Android Manifest (Hardware Accelerated & Cleartext Traffic Aktif)
+    # 2. Android Manifest
     write(
         ROOT / "app" / "src" / "main" / "AndroidManifest.xml",
         (
@@ -130,7 +184,7 @@ def main():
         ),
     )
 
-    # 4. Resources
+    # 3. Resources
     write(
         ROOT / "app" / "src" / "main" / "res" / "values" / "strings.xml",
         f'{LT}resources{GT}{LT}string name="app_name"{GT}{clean_app_name}{LT}/string{GT}{LT}/resources{GT}',
@@ -146,10 +200,10 @@ def main():
         ),
     )
 
-    # 5. Simpan file HTML ke folder Assets
-    write(ROOT / "app" / "src" / "main" / "assets" / "index.html", html)
+    # 4. Tulis file HTML ke Assets
+    write(ROOT / "app" / "src" / "main" / "assets" / "index.html", final_html)
 
-    # 6. MainActivity dengan Background Gelap & Konfigurasi WebView Anti-Block
+    # 5. MainActivity dengan loadDataWithBaseURL (Akses LocalStorage Resmi)
     java_code = (
         f"package {pkg};\n\n"
         "import android.app.Activity;\n"
@@ -163,7 +217,10 @@ def main():
         "import android.webkit.WebSettings;\n"
         "import android.webkit.WebView;\n"
         "import android.webkit.WebViewClient;\n"
-        "import android.widget.Toast;\n\n"
+        "import android.widget.Toast;\n"
+        "import java.io.ByteArrayOutputStream;\n"
+        "import java.io.InputStream;\n"
+        "import java.nio.charset.StandardCharsets;\n\n"
         "public class MainActivity extends Activity {\n"
         "    private WebView webView;\n\n"
         "    @Override\n"
@@ -172,6 +229,9 @@ def main():
         "        webView = new WebView(this);\n"
         "        webView.setBackgroundColor(Color.parseColor(\"#0F172A\"));\n"
         "        setContentView(webView);\n\n"
+        "        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {\n"
+        "            WebView.setWebContentsDebuggingEnabled(true);\n"
+        "        }\n\n"
         "        WebSettings ws = webView.getSettings();\n"
         "        ws.setJavaScriptEnabled(true);\n"
         "        ws.setDomStorageEnabled(true);\n"
@@ -181,14 +241,24 @@ def main():
         "        ws.setAllowFileAccessFromFileURLs(true);\n"
         "        ws.setAllowUniversalAccessFromFileURLs(true);\n"
         "        ws.setLoadWithOverviewMode(true);\n"
-        "        ws.setUseWideViewPort(true);\n"
-        "        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {\n"
-        "            ws.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);\n"
-        "        }\n\n"
+        "        ws.setUseWideViewPort(true);\n\n"
         "        webView.setWebViewClient(new WebViewClient());\n"
         "        webView.setWebChromeClient(new WebChromeClient());\n"
         "        webView.addJavascriptInterface(new NativeBridge(this), \"Android\");\n\n"
-        "        webView.loadUrl(\"file:///android_asset/index.html\");\n"
+        "        try {\n"
+        "            InputStream is = getAssets().open(\"index.html\");\n"
+        "            ByteArrayOutputStream buffer = new ByteArrayOutputStream();\n"
+        "            int nRead;\n"
+        "            byte[] data = new byte[4096];\n"
+        "            while ((nRead = is.read(data, 0, data.length)) != -1) {\n"
+        "                buffer.write(data, 0, nRead);\n"
+        "            }\n"
+        "            is.close();\n"
+        "            String htmlContent = buffer.toString(\"UTF-8\");\n"
+        "            webView.loadDataWithBaseURL(\"https://localhost/\", htmlContent, \"text/html\", \"UTF-8\", null);\n"
+        "        } catch (Exception e) {\n"
+        "            webView.loadUrl(\"file:///android_asset/index.html\");\n"
+        "        }\n"
         "    }\n\n"
         "    @Override\n"
         "    public void onBackPressed() {\n"
@@ -200,10 +270,17 @@ def main():
         "    }\n\n"
         "    public class NativeBridge {\n"
         "        Context context;\n"
-        "        NativeBridge(Context c) { context = c; }\n"
-        "        @JavascriptInterface public void showToast(String m) { Toast.makeText(context, m, Toast.LENGTH_SHORT).show(); }\n"
-        "        @JavascriptInterface public void vibrate(long ms) {\n"
-        "            try { ((Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE)).vibrate(ms); } catch(Exception ignored){}\n"
+        "        NativeBridge(Context c) { context = c; }\n\n"
+        "        @JavascriptInterface\n"
+        "        public void showToast(String m) {\n"
+        "            Toast.makeText(context, m, Toast.LENGTH_SHORT).show();\n"
+        "        }\n\n"
+        "        @JavascriptInterface\n"
+        "        public void vibrate(long ms) {\n"
+        "            try {\n"
+        "                Vibrator v = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);\n"
+        "                if (v != null) v.vibrate(ms);\n"
+        "            } catch (Exception ignored) {}\n"
         "        }\n"
         "    }\n"
         "}\n"
@@ -211,7 +288,7 @@ def main():
 
     java_dir = ROOT / "app" / "src" / "main" / "java" / pathlib.Path(*pkg.split("."))
     write(java_dir / "MainActivity.java", java_code)
-    print(f"[OK] Universal Native Shell Offline-First siap untuk {clean_app_name} ({pkg})")
+    print(f"[OK] Universal Native Shell siap untuk {clean_app_name} ({pkg})")
 
 
 if __name__ == "__main__":
