@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 React Native + Hermes Studio Project Generator
-- Fixed: Isolasi string JSX murni tanpa interferensi f-string Python.
-- Hermes AOT Bytecode Compilation Ready.
+- Fixed: Menambahkan babel.config.js resmi React Native.
+- Menyusun struktur project Android Gradle untuk React Native + Hermes.
 """
 import base64
 import json
@@ -413,7 +413,7 @@ def main():
     else:
         app_js_content = user_code
 
-    # 1. Root React Native Config
+    # 1. Root React Native Config & Babel Config
     write(ROOT / "package.json", json.dumps({
         "name": pkg_suffix,
         "version": "1.5.0",
@@ -426,12 +426,19 @@ def main():
             "react-native": "0.73.6"
         },
         "devDependencies": {
-            "@react-native/babel-preset": "^0.73.21",
-            "@react-native/metro-config": "^0.73.5",
-            "babel-jest": "^29.6.3",
-            "metro-react-native-babel-preset": "^0.77.0"
+            "@babel/core": "^7.20.0",
+            "@babel/preset-env": "^7.20.0",
+            "@react-native/babel-preset": "0.73.21",
+            "@react-native/metro-config": "0.73.5"
         }
     }, indent=2))
+
+    # File babel.config.js yang wajib ada untuk Metro Bundler
+    write(ROOT / "babel.config.js", (
+        "module.exports = {\n"
+        "  presets: ['module:@react-native/babel-preset'],\n"
+        "};\n"
+    ))
 
     write(ROOT / "index.js", (
         "import {AppRegistry} from 'react-native';\n"
@@ -510,17 +517,9 @@ def main():
         "        versionCode 1\n"
         "        versionName '1.5'\n"
         "    }\n"
-        "    signingConfigs {\n"
-        "        release {\n"
-        "            storeFile file('debug.keystore')\n"
-        "            storePassword 'android'\n"
-        "            keyAlias 'androiddebugkey'\n"
-        "            keyPassword 'android'\n"
-        "        }\n"
-        "    }\n"
         "    buildTypes {\n"
         "        release {\n"
-        "            signingConfig signingConfigs.release\n"
+        "            signingConfig signingConfigs.debug\n"
         "            minifyEnabled false\n"
         "        }\n"
         "    }\n"
