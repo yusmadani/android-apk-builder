@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-React Native + Hermes Studio Project Generator
-- Fixed: Menambahkan babel.config.js resmi React Native.
-- Menyusun struktur project Android Gradle untuk React Native + Hermes.
+React Native + Meta Hermes Workspace Generator (Clean & Robust Edition)
+- Solves Babel transformer / Metro parseSync issues.
+- Sets up proper babel.config.js and metro.config.js.
+- Generates 60 FPS Native Android harness with Hermes AOT Bytecode.
 """
 import base64
 import json
@@ -57,12 +58,12 @@ export default function App() {
   }, []);
 
   const toggleItem = (id) => {
-    Vibration.vibrate(35);
+    try { Vibration.vibrate(35); } catch (e) {}
     setItems(prev => prev.map(item => item.id === id ? { ...item, done: !item.done } : item));
   };
 
   const completedCount = items.filter(i => i.done).length;
-  const progressPercent = Math.round((completedCount / items.length) * 100) || 0;
+  const progressPercent = items.length > 0 ? Math.round((completedCount / items.length) * 100) : 0;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -134,7 +135,7 @@ export default function App() {
               <TouchableOpacity
                 style={styles.actionBtn}
                 onPress={() => {
-                  Vibration.vibrate(40);
+                  try { Vibration.vibrate(40); } catch (e) {}
                   Alert.alert('Sinkronisasi', 'Semua entri berhasil diperbarui ke database lokal.');
                 }}
               >
@@ -159,19 +160,19 @@ export default function App() {
       <View style={styles.tabBar}>
         <TouchableOpacity
           style={styles.tabItem}
-          onPress={() => { Vibration.vibrate(20); setActiveTab('dashboard'); }}
+          onPress={() => { try { Vibration.vibrate(20); } catch (e) {} setActiveTab('dashboard'); }}
         >
           <Text style={[styles.tabText, activeTab === 'dashboard' && styles.tabTextActive]}>DASHBOARD</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.tabItem}
-          onPress={() => { Vibration.vibrate(20); setActiveTab('kelola'); }}
+          onPress={() => { try { Vibration.vibrate(20); } catch (e) {} setActiveTab('kelola'); }}
         >
           <Text style={[styles.tabText, activeTab === 'kelola' && styles.tabTextActive]}>KELOLA</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.tabItem}
-          onPress={() => { Vibration.vibrate(20); setActiveTab('analisis'); }}
+          onPress={() => { try { Vibration.vibrate(20); } catch (e) {} setActiveTab('analisis'); }}
         >
           <Text style={[styles.tabText, activeTab === 'analisis' && styles.tabTextActive]}>ANALISIS</Text>
         </TouchableOpacity>
@@ -382,6 +383,17 @@ const styles = StyleSheet.create({
 });
 """
 
+def clean_user_jsx(code):
+    if not code:
+        return ""
+    c = code.strip()
+    c = re.sub(r"^```(?:javascript|jsx|tsx|js)?\s*", "", c, flags=re.IGNORECASE)
+    c = re.sub(r"\s*```$", "", c)
+    # Validasi bahwa kode benar-benar kode React Native
+    if "import React" in c and ("<View" in c or "<SafeAreaView" in c) and "export default" in c:
+        return c
+    return ""
+
 def main():
     raw_name = "Jadwal Mengajar"
     b64 = None
@@ -404,16 +416,17 @@ def main():
     user_code = ""
     if b64:
         try:
-            user_code = base64.b64decode(b64).decode("utf-8", errors="ignore")
+            decoded = base64.b64decode(b64).decode("utf-8", errors="ignore")
+            user_code = clean_user_jsx(decoded)
         except Exception:
             user_code = ""
 
-    if not user_code or "import React" not in user_code:
+    if not user_code:
         app_js_content = BASE_REACT_NATIVE_APP.replace("__APP_TITLE__", clean_name)
     else:
         app_js_content = user_code
 
-    # 1. Root React Native Config & Babel Config
+    # 1. Root React Native Files & Configurations
     write(ROOT / "package.json", json.dumps({
         "name": pkg_suffix,
         "version": "1.5.0",
@@ -429,11 +442,12 @@ def main():
             "@babel/core": "^7.20.0",
             "@babel/preset-env": "^7.20.0",
             "@react-native/babel-preset": "0.73.21",
-            "@react-native/metro-config": "0.73.5"
+            "@react-native/metro-config": "0.73.5",
+            "metro-react-native-babel-preset": "^0.77.0"
         }
     }, indent=2))
 
-    # File babel.config.js yang wajib ada untuk Metro Bundler
+    # Babel config yang kompatibel dengan Metro Transformer Worker
     write(ROOT / "babel.config.js", (
         "module.exports = {\n"
         "  presets: ['module:@react-native/babel-preset'],\n"
@@ -454,7 +468,7 @@ def main():
         "module.exports = mergeConfig(getDefaultConfig(__dirname), config);\n"
     ))
 
-    # 2. Android Harness & Hermes Configuration
+    # 2. Android Native Harness with Hermes AOT Enabled
     android_dir = ROOT / "android"
 
     write(android_dir / "gradle" / "wrapper" / "gradle-wrapper.properties", (
@@ -500,6 +514,7 @@ def main():
         "react.internal.disableAapt2=false\n"
     ))
 
+    # Hermes diaktifkan di app/build.gradle
     write(android_dir / "app" / "build.gradle", (
         "apply plugin: 'com.android.application'\n"
         "apply plugin: 'org.jetbrains.kotlin.android'\n"
