@@ -88,14 +88,11 @@ jobs:
 
           if [ -f "$APK_PATH" ]; then
             FILE_SIZE=$(du -h "$APK_PATH" | cut -f1)
+            CAPTION="🚀 *React Native Hermes APK Selesai!*%0A%0A📱 *Aplikasi:* ${APP_NAME}%0A⚡ *Engine:* Meta Hermes AOT Bytecode%0A📦 *Ukuran:* ${FILE_SIZE}%0A💎 *Arsitektur:* 100% Native View & GPU Rendered"
+            
             curl -F chat_id="$CHAT_ID" \
                  -F document=@"$APK_PATH" \
-                 -F caption="🚀 *React Native Hermes APK Selesai!*
-
-📱 *Aplikasi:* ${APP_NAME}
-⚡ *Engine:* Meta Hermes AOT Bytecode
-📦 *Ukuran:* ${FILE_SIZE}
-💎 *Arsitektur:* 100% Native View & GPU Rendered" \
+                 -F caption="$CAPTION" \
                  -F parse_mode="Markdown" \
                  "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument"
           else
