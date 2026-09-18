@@ -85,7 +85,7 @@ def main():
         "}\n"
     )
 
-    # 3. Android Manifest (Widget & Permissions)
+    # 3. Android Manifest (Sintaks diperbaiki)
     write(ROOT / "app" / "src" / "main" / "AndroidManifest.xml",
         f"{LT}?xml version=\"1.0\" encoding=\"utf-8\"?{GT}\n"
         f"{LT}manifest xmlns:android=\"http://schemas.android.com/apk/res/android\"{GT}\n"
@@ -97,7 +97,7 @@ def main():
         f'        android:theme="@style/Theme.Cyberpunk"{GT}\n'
         f"        {LT}activity\n"
         f'            android:name=".MainActivity"\n'
-        f'            android:exported="true"{GT}\n"
+        f'            android:exported="true"{GT}\n'
         f"            {LT}intent-filter{GT}\n"
         f'                {LT}action android:name="android.intent.action.MAIN" /{GT}\n'
         f'                {LT}category android:name="android.intent.category.LAUNCHER" /{GT}\n'
