@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Universal Native Shell (Dual Input: CLI Args + Payload JSON)
-- Mendukung pemanggilan via argumen CLI maupun file payload.json.
+- Mengunci Gradle Wrapper ke versi 8.7 (Kompatibel penuh dengan AGP 8.5.2).
 - Menggunakan AndroidX WebViewAssetLoader (HTTPS Domain Resmi).
 - Built-in Pro Mobile UI Kit (Glassmorphism & Haptic) 100% Offline.
 """
@@ -282,11 +282,9 @@ def main():
     raw_name = "ProApp"
     b64 = None
 
-    # Jalur 1: Baca dari argumen command-line (jika dipanggil: python generate_project.py "$APP_NAME" "$HTML_B64")
     if len(sys.argv) >= 3:
         raw_name = sys.argv[1]
         b64 = sys.argv[2]
-    # Jalur 2: Baca dari payload.json (jika dibuat oleh step workflow)
     elif PAYLOAD.exists():
         try:
             data = json.loads(PAYLOAD.read_text(encoding="utf-8"))
@@ -313,7 +311,18 @@ def main():
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(content, encoding="utf-8")
 
-    # 1. Gradle Files
+    # 1. Gradle Files & Gradle Wrapper 8.7 (Wajib untuk AGP 8.5.2)
+    write(
+        ROOT / "gradle" / "wrapper" / "gradle-wrapper.properties",
+        (
+            "distributionBase=GRADLE_USER_HOME\n"
+            "distributionPath=wrapper/dists\n"
+            "distributionUrl=https\\://services.gradle.org/distributions/gradle-8.7-bin.zip\n"
+            "zipStoreBase=GRADLE_USER_HOME\n"
+            "zipStorePath=wrapper/dists\n"
+        ),
+    )
+
     write(
         ROOT / "settings.gradle",
         (
@@ -412,7 +421,7 @@ def main():
     # 4. Aset HTML
     write(ROOT / "app" / "src" / "main" / "assets" / "index.html", final_html)
 
-    # 5. MainActivity (AndroidX WebViewAssetLoader)
+    # 5. MainActivity
     java_code = (
         f"package {pkg};\n\n"
         "import android.annotation.SuppressLint;\n"
