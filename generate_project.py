@@ -5,104 +5,102 @@ import re
 import base64
 import time
 import hashlib
+import urllib.request
 
-def generate_android_project(app_name: str, html_b64: str):
-    # 1. Sanitasi Nama Aplikasi
-    safe_name = re.sub(r'[^a-zA-Z0-9]', '', app_name)
-    if not safe_name:
-        safe_name = "GeneratedApp"
+def inject_heavy_assets(target_asset_dir: str, engine_type: str):
+    """
+    Menyuntikkan pustaka besar, modul WebGL, model 3D, 
+    atau asset binary offline langsung ke folder assets APK.
+    """
+    print(f"[ASSET] Menyiapkan modul aset untuk tipe: {engine_type}...")
 
-    # 2. Buat Unique Package Name (Mencegah bentrok update di Android)
-    clean_pkg_name = safe_name.lower()
-    if not clean_pkg_name or clean_pkg_name[0].isdigit():
-        clean_pkg_name = "app" + clean_pkg_name
+    # Folder pustaka offline di dalam assets
+    vendor_dir = os.path.join(target_asset_dir, "vendor")
+    os.makedirs(vendor_dir, exist_ok=True)
+
+    # Contoh dependensi 3D & Audio yang disematkan lokal (Zero-Internet Runtime)
+    asset_manifest = {
+        # Engine 3D Standalone (Three.js Bundle + OrbitControls)
+        "three.min.js": "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js",
+        # Framework UI Offline CSS murni berukuran lengkap
+        "bootstrap.min.css": "https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css",
+        # Engine Fisika 2D / 3D lokal (Cannon / Matter)
+        "cannon.min.js": "https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"
+    }
+
+    # Unduh setiap dependensi berat ke dalam APK
+    for filename, url in asset_manifest.items():
+        dest = os.path.join(vendor_dir, filename)
+        if not os.path.exists(dest):
+            try:
+                print(f"[ASSET] Mengunduh {filename}...")
+                urllib.request.urlretrieve(url, dest)
+            except Exception as e:
+                print(f"[WARN] Gagal mengunduh {filename}: {e}")
+
+    # Jika butuh aset ratusan MB (misal dataset SQLite / Audio bank dummy / Texture pack)
+    if engine_type == "3d_game" or engine_type == "heavy":
+        data_file = os.path.join(target_asset_dir, "data_pack.bin")
+        if not os.path.exists(data_file):
+            print("[ASSET] Membangun alokasi asset binary pack...")
+            # Contoh pembuatan blob aset lokal berukuran besar
+            with open(data_file, "wb") as f:
+                f.write(os.urandom(50 * 1024 * 1024)) # 50 MB buffer pack contoh
+
+def generate_android_project(app_name: str, html_b64: str, engine_type: str = "default"):
+    safe_name = re.sub(r'[^a-zA-Z0-9]', '', app_name) or "HeavyApp"
+    clean_pkg = safe_name.lower()
+    if clean_pkg[0].isdigit():
+        clean_pkg = "app" + clean_pkg
         
-    unique_hash = hashlib.md5(f"{clean_pkg_name}_{time.time()}".encode()).hexdigest()[:6]
-    dynamic_package_id = f"com.apkbuilder.{clean_pkg_name}_{unique_hash}"
+    unique_hash = hashlib.md5(f"{clean_pkg}_{time.time()}".encode()).hexdigest()[:6]
+    package_id = f"com.apkbuilder.{clean_pkg}_{unique_hash}"
 
-    # 3. Decode dan Verifikasi Konten HTML
+    # Decode HTML
     try:
         html_content = base64.b64decode(html_b64).decode("utf-8")
-        if len(html_content.strip()) < 50:
-            raise ValueError("HTML terlalu pendek")
-    except Exception as e:
-        print(f"[WARN] Gagal decode base64 atau HTML kosong ({e}). Menggunakan template darurat.")
-        html_content = f"<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1.0'></head><body style='background:#0F172A;color:white;display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;'><h2>{safe_name} Siap Digunakan</h2></body></html>"
+    except Exception:
+        html_content = "<!DOCTYPE html><html><body><h1>Inisialisasi Gagal</h1></body></html>"
 
-    print(f"[INFO] Ukuran file HTML: {len(html_content.encode('utf-8'))} bytes")
+    assets_path = "app/src/main/assets"
+    os.makedirs(f"app/src/main/java/com/apkbuilder/app", exist_ok=True)
+    os.makedirs(assets_path, exist_ok=True)
+    os.makedirs("app/src/main/res/values", exist_ok=True)
+    os.makedirs("app/src/main/res/drawable", exist_ok=True)
 
-    # 4. Direktori Struktur Android
-    dirs = [
-        "app",
-        "app/src/main/java/com/apkbuilder/app",
-        "app/src/main/assets",
-        "app/src/main/res/values",
-        "app/src/main/res/drawable"
-    ]
-    for d in dirs:
-        os.makedirs(d, exist_ok=True)
-
-    # 5. Tulis index.html
-    with open("app/src/main/assets/index.html", "w", encoding="utf-8") as f:
+    # 1. Tulis index.html
+    with open(f"{assets_path}/index.html", "w", encoding="utf-8") as f:
         f.write(html_content)
 
-    # 6. Buat Vector Icon Aplikasi Modern (ic_launcher.xml)
+    # 2. Suntikkan Aset Berat (Engine, CSS Offline, Sound, Texture)
+    inject_heavy_assets(assets_path, engine_type)
+
+    # 3. Vector Icon
     with open("app/src/main/res/drawable/ic_launcher.xml", "w", encoding="utf-8") as f:
         f.write("""<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-    <!-- Background Circle Gelap Modern -->
-    <path
-        android:fillColor="#1E293B"
-        android:pathData="M54,4 C26.39,4 4,26.39 4,54 C4,81.61 26.39,104 54,104 C81.61,104 104,81.61 104,54 C104,26.39 81.61,4 54,4 Z"/>
-    <!-- Aksen Gadget / App Icon Cyan -->
-    <path
-        android:fillColor="#38BDF8"
-        android:pathData="M38,28 L70,28 A6,6 0 0,1 76,34 L76,74 A6,6 0 0,1 70,80 L38,80 A6,6 0 0,1 32,74 L32,34 A6,6 0 0,1 38,28 Z"/>
-    <!-- Layar Dalam -->
-    <path
-        android:fillColor="#0F172A"
-        android:pathData="M36,36 L72,36 L72,68 L36,68 Z"/>
-    <!-- Tombol Home / Aksen Bawah -->
-    <path
-        android:fillColor="#38BDF8"
-        android:pathData="M54,74 A2,2 0 1,0 54,74.1 Z"/>
-</vector>
-""")
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#1E293B" android:pathData="M54,4 C26.39,4 4,26.39 4,54 C4,81.61 26.39,104 54,104 C81.61,104 104,81.61 104,54 C104,26.39 81.61,4 54,4 Z"/>
+    <path android:fillColor="#F43F5E" android:pathData="M38,28 L70,28 A6,6 0 0,1 76,34 L76,74 A6,6 0 0,1 70,80 L38,80 A6,6 0 0,1 32,74 L32,34 A6,6 0 0,1 38,28 Z"/>
+</vector>""")
 
-    # 7. settings.gradle (Root)
+    # 4. Settings & Root Gradle
     with open("settings.gradle", "w", encoding="utf-8") as f:
-        f.write('rootProject.name = "UniversalApp"\ninclude(":app")\n')
+        f.write('rootProject.name = "UniversalHeavyApp"\ninclude(":app")\n')
 
-    # 8. build.gradle (Root)
     with open("build.gradle", "w", encoding="utf-8") as f:
         f.write("""buildscript {
-    repositories {
-        google()
-        mavenCentral()
-    }
-    dependencies {
-        classpath "com.android.tools.build:gradle:8.2.2"
-    }
+    repositories { google(); mavenCentral() }
+    dependencies { classpath "com.android.tools.build:gradle:8.2.2" }
 }
 allprojects {
-    repositories {
-        google()
-        mavenCentral()
-    }
+    repositories { google(); mavenCentral() }
 }
 """)
 
-    # 9. gradle.properties
     with open("gradle.properties", "w", encoding="utf-8") as f:
-        f.write("""org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
-android.useAndroidX=true
-android.nonTransitiveRClass=true
-""")
+        f.write("org.gradle.jvmargs=-Xmx4096m -Dfile.encoding=UTF-8\nandroid.useAndroidX=true\n")
 
-    # 10. app/build.gradle (ApplicationId Dibuat Dinamis)
+    # 5. app/build.gradle (Alokasikan Memori Besar untuk APK Jumbo)
     with open("app/build.gradle", "w", encoding="utf-8") as f:
         f.write(f"""apply plugin: 'com.android.application'
 
@@ -111,56 +109,44 @@ android {{
     compileSdk 34
 
     defaultConfig {{
-        applicationId "{dynamic_package_id}"
+        applicationId "{package_id}"
         minSdk 21
         targetSdk 34
         versionCode 1
         versionName "1.0"
     }}
 
+    aaptOptions {{
+        // Cegah kompresi ganda pada asset binary raksasa agar tidak crash saat compile
+        noCompress ''
+    }}
+
     buildTypes {{
-        release {{
-            minifyEnabled false
-        }}
-        debug {{
-            minifyEnabled false
-        }}
+        debug {{ minifyEnabled false }}
+        release {{ minifyEnabled false }}
     }}
     compileOptions {{
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }}
 }}
-
-dependencies {{
-    // Standalone engine tanpa library eksternal
-}}
 """)
 
-    # 11. app/src/main/res/values/strings.xml
+    # 6. Manifest & Strings
     with open("app/src/main/res/values/strings.xml", "w", encoding="utf-8") as f:
-        f.write(f"""<resources>
-    <string name="app_name">{safe_name}</string>
-</resources>
-""")
+        f.write(f'<resources><string name="app_name">{safe_name}</string></resources>')
 
-    # 12. app/src/main/AndroidManifest.xml (Didaftarkan Icon & Unique Package)
     with open("app/src/main/AndroidManifest.xml", "w", encoding="utf-8") as f:
         f.write("""<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-
     <application
         android:allowBackup="true"
         android:label="@string/app_name"
         android:icon="@drawable/ic_launcher"
-        android:roundIcon="@drawable/ic_launcher"
-        android:supportsRtl="true"
         android:hardwareAccelerated="true"
-        android:usesCleartextTraffic="true">
-        
+        android:largeHeap="true">
         <activity
             android:name="com.apkbuilder.app.MainActivity"
             android:exported="true"
@@ -175,26 +161,17 @@ dependencies {{
 </manifest>
 """)
 
-    # 13. app/src/main/java/com/apkbuilder/app/MainActivity.java
+    # 7. MainActivity (Tangguh menangani Aset Besar & WebGL)
     with open("app/src/main/java/com/apkbuilder/app/MainActivity.java", "w", encoding="utf-8") as f:
         f.write("""package com.apkbuilder.app;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.os.Bundle;
-import android.util.Log;
 import android.view.View;
-import android.webkit.ConsoleMessage;
-import android.webkit.WebChromeClient;
-import android.webkit.WebResourceError;
-import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
-import java.io.BufferedReader;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 
 public class MainActivity extends Activity {
     private WebView webView;
@@ -203,7 +180,6 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
         webView = new WebView(this);
         setContentView(webView);
 
@@ -215,44 +191,13 @@ public class MainActivity extends Activity {
         ws.setAllowContentAccess(true);
         ws.setAllowFileAccessFromFileURLs(true);
         ws.setAllowUniversalAccessFromFileURLs(true);
-        ws.setLoadWithOverviewMode(true);
-        ws.setUseWideViewPort(true);
-        ws.setSupportZoom(false);
-        ws.setCacheMode(WebSettings.LOAD_DEFAULT);
+        ws.setMediaPlaybackRequiresUserGesture(false);
 
         webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+        webView.setWebViewClient(new WebViewClient());
 
-        webView.setWebChromeClient(new WebChromeClient() {
-            @Override
-            public boolean onConsoleMessage(ConsoleMessage cm) {
-                Log.d("APK_JS_LOG", cm.message() + " [Baris " + cm.lineNumber() + "]");
-                return true;
-            }
-        });
-
-        webView.setWebViewClient(new WebViewClient() {
-            @Override
-            public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
-                Log.e("APK_WEB_ERROR", "Gagal memuat URL: " + error.getDescription());
-            }
-        });
-
-        try {
-            InputStream is = getAssets().open("index.html");
-            BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8));
-            StringBuilder sb = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) {
-                sb.append(line).append("\\n");
-            }
-            reader.close();
-            is.close();
-
-            webView.loadDataWithBaseURL("https://appassets.androidcache.local/", sb.toString(), "text/html", "UTF-8", null);
-        } catch (Exception e) {
-            Log.e("APK_LOAD_FAIL", "Fallback loadUrl", e);
-            webView.loadUrl("file:///android_asset/index.html");
-        }
+        // Muat langsung dari root assets agar file vendor/ dapat diakses via path relatif
+        webView.loadUrl("file:///android_asset/index.html");
     }
 
     @Override
@@ -265,14 +210,10 @@ public class MainActivity extends Activity {
     }
 }
 """)
-
-    print(f"[OK] Sukses merakit project. Package ID: {dynamic_package_id}")
+    print(f"[OK] Sukses merakit proyek Android skala besar: {package_id}")
 
 if __name__ == "__main__":
-    if len(sys.argv) < 3:
-        print("Penggunaan: python generate_project.py <APP_NAME> <HTML_BASE64>")
-        sys.exit(1)
-
-    app_name_arg = sys.argv[1]
-    html_b64_arg = sys.argv[2]
-    generate_android_project(app_name_arg, html_b64_arg)
+    name = sys.argv[1] if len(sys.argv) > 1 else "HeavyApp"
+    code = sys.argv[2] if len(sys.argv) > 2 else ""
+    eng = sys.argv[3] if len(sys.argv) > 3 else "default"
+    generate_android_project(name, code, eng)
