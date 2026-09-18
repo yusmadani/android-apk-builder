@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
-Universal Native Shell (Pro Edition - Built-in Auto Tab Router)
-- Built-in Router: Tab navigasi otomatis berfungsi tanpa mengandalkan script AI.
-- Event Delegation: Anti-macet, klik menu selalu aktif.
-- Safe Storage & Error Banner.
+Native Android Generator (Cyberpunk Edition)
+- Target: Android 10+ (API 26+)
+- Arsitektur: Native Android + Room SQLite + AppWidgetProvider
+- Tema: Cyberpunk (#0F2744 Dark Blue, #00D4AA Cyan, #FF00FF Magenta)
+- Output: APK Native ~4.5 MB
 """
-import base64
-import json
 import os
 import pathlib
-import re
 import sys
+import json
+import re
 
 ROOT = pathlib.Path(".")
 PAYLOAD = pathlib.Path("payload.json")
@@ -18,581 +18,351 @@ PAYLOAD = pathlib.Path("payload.json")
 LT = chr(60)
 GT = chr(62)
 
-PRO_UI_CSS = """
-:root {
-  --bg-main: #0B0F19;
-  --bg-card: #151D2E;
-  --bg-card-hover: #1E293B;
-  --border-color: #22304A;
-  --accent-primary: #6366F1;
-  --accent-gradient: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%);
-  --accent-emerald: linear-gradient(135deg, #10B981 0%, #059669 100%);
-  --text-main: #F8FAFC;
-  --text-muted: #94A3B8;
-  --danger: #EF4444;
-  --safe-bottom: env(safe-area-inset-bottom, 20px);
-}
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-  -webkit-tap-highlight-color: transparent;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  user-select: none;
-}
-body {
-  background-color: var(--bg-main);
-  color: var(--text-main);
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  overflow-x: hidden;
-  padding-bottom: calc(75px + var(--safe-bottom));
-}
-.app-header {
-  position: sticky;
-  top: 0;
-  z-index: 50;
-  background: rgba(11, 15, 25, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--border-color);
-  padding: 14px 18px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.app-header h1 {
-  font-size: 1.15rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  background: var(--accent-gradient);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-.container {
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  flex: 1;
-}
-/* Multi-Tab Views System */
-.view {
-  display: none;
-  animation: fadeIn 0.2s ease-in-out;
-}
-.view.active {
-  display: block;
-}
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-/* Cards & Containers */
-.card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: 16px;
-  padding: 16px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
-  margin-bottom: 14px;
-}
-.stat-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-  margin-bottom: 14px;
-}
-.stat-box {
-  background: rgba(34, 48, 74, 0.4);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  padding: 12px;
-  text-align: center;
-}
-.stat-val { font-size: 1.5rem; font-weight: 800; color: #F8FAFC; }
-.stat-lbl {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-top: 2px;
-}
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 12px 18px;
-  border-radius: 12px;
-  font-size: 0.92rem;
-  font-weight: 600;
-  border: none;
-  cursor: pointer;
-  background: var(--accent-gradient);
-  color: #FFFFFF;
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
-  transition: all 0.15s ease;
-  width: 100%;
-}
-.btn:active { transform: scale(0.97); opacity: 0.9; }
-.btn-emerald { background: var(--accent-emerald); box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35); }
-.btn-danger { background: var(--danger); box-shadow: 0 4px 12px rgba(239, 68, 68, 0.35); }
-.btn-secondary { background: var(--bg-card-hover); border: 1px solid var(--border-color); color: var(--text-main); }
-.input-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
-.input-group label { font-size: 0.8rem; color: var(--text-muted); font-weight: 500; }
-.input-field {
-  background: #0B0F19;
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
-  padding: 12px;
-  color: #FFFFFF;
-  font-size: 0.95rem;
-  outline: none;
-}
-.input-field:focus { border-color: var(--accent-primary); }
-.item-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px;
-  background: rgba(11, 15, 25, 0.5);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  margin-bottom: 8px;
-  gap: 10px;
-}
-.item-row.done { opacity: 0.5; text-decoration: line-through; }
-/* Bottom Navigation Bar */
-.tab-bar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: calc(62px + var(--safe-bottom));
-  padding-bottom: var(--safe-bottom);
-  background: rgba(15, 23, 42, 0.95);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border-top: 1px solid var(--border-color);
-  display: flex;
-  align-items: center;
-  justify-content: space-around;
-  z-index: 1000;
-}
-.tab-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  font-size: 0.72rem;
-  font-weight: 500;
-  gap: 4px;
-  cursor: pointer;
-  flex: 1;
-  height: 100%;
-}
-.tab-item.active { color: #818CF8; font-weight: 700; }
-.tab-item .icon { font-size: 1.25rem; }
-/* Error Banner */
-#debug-err-banner {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  background: #DC2626;
-  color: white;
-  padding: 8px 12px;
-  font-size: 11px;
-  z-index: 999999;
-  display: none;
-  word-break: break-all;
-}
-"""
-
-PRO_UI_JS = """
-// 1. Tangkap Error JS
-window.onerror = function(msg, url, line) {
-  var b = document.getElementById('debug-err-banner');
-  if (b) {
-    b.style.display = 'block';
-    b.innerHTML += '⚠️ <b>JS Error:</b> ' + msg + ' (L:' + line + ')<br>';
-  }
-};
-
-// 2. Mesin Database Aman
-window.DB = {
-  get: function(key, defaultVal) {
-    try {
-      var val = localStorage.getItem(key);
-      return val ? JSON.parse(val) : defaultVal;
-    } catch(e) { return defaultVal; }
-  },
-  set: function(key, val) {
-    try {
-      localStorage.setItem(key, JSON.stringify(val));
-      return true;
-    } catch(e) { return false; }
-  }
-};
-
-// 3. Jembatan Native Hardware
-window.Native = {
-  toast: function(msg) {
-    if (window.Android && window.Android.showToast) { window.Android.showToast(msg); }
-  },
-  vibrate: function(ms) {
-    if (window.Android && window.Android.vibrate) { window.Android.vibrate(ms || 35); }
-  }
-};
-
-// 4. MESIN NAVIGASI TAB OTOMATIS (BUILT-IN ROUTER)
-window.switchTab = function(targetId) {
-  if (!targetId) return;
-  targetId = targetId.replace('#', '');
-  
-  // Sembunyikan semua tampilan
-  var views = document.querySelectorAll('.view, section[id]');
-  views.forEach(function(v) {
-    v.style.display = 'none';
-    v.classList.remove('active');
-  });
-
-  // Tampilkan target (cocokkan targetId langsung atau dengan prefix 'tab-')
-  var target = document.getElementById(targetId) || document.getElementById('tab-' + targetId);
-  if (!target) {
-    var clean = targetId.replace('tab-', '');
-    target = document.getElementById(clean);
-  }
-  if (target) {
-    target.style.display = 'block';
-    target.classList.add('active');
-  }
-
-  // Update tombol aktif di Tab Bar
-  document.querySelectorAll('.tab-item').forEach(function(btn) {
-    var rawAttr = (btn.getAttribute('data-tab') || btn.getAttribute('onclick') || '').toLowerCase();
-    if (rawAttr.indexOf(targetId.toLowerCase()) !== -1) {
-      btn.classList.add('active');
-    } else {
-      btn.classList.remove('active');
-    }
-  });
-
-  Native.vibrate(30);
-};
-
-// Event Delegation: Tangkap klik menu tab secara global
-document.addEventListener('click', function(e) {
-  var tabBtn = e.target.closest('.tab-item');
-  if (tabBtn) {
-    var target = tabBtn.getAttribute('data-tab');
-    if (!target) {
-      var oc = tabBtn.getAttribute('onclick') || '';
-      var m = oc.match(/switchTab\\(['"]([^'"]+)['"]\\)/);
-      if (m) target = m[1];
-    }
-    if (target) {
-      e.preventDefault();
-      switchTab(target);
-    }
-  } else if (e.target.closest('button, .btn, .card')) {
-    Native.vibrate(20);
-  }
-});
-
-// Inisialisasi tampilan tab pertama saat halaman siap
-document.addEventListener('DOMContentLoaded', function() {
-  setTimeout(function() {
-    var firstView = document.querySelector('.view, section[id]');
-    if (firstView && !document.querySelector('.view.active')) {
-      switchTab(firstView.id);
-    }
-  }, 100);
-});
-"""
-
-def clean_html_code(raw_code):
-    if not raw_code:
-        return ""
-    code = raw_code.strip()
-    code = re.sub(r"^```(?:html|xml)?\s*", "", code, flags=re.IGNORECASE)
-    code = re.sub(r"\s*```$", "", code)
-    return code.strip()
-
-def assemble_pro_html(user_html, app_title):
-    user_html = clean_html_code(user_html)
-    injected = f"{LT}style{GT}{PRO_UI_CSS}{LT}/style{GT}\n{LT}script{GT}{PRO_UI_JS}{LT}/script{GT}"
-
-    if f"{LT}body" in user_html.lower():
-        if f"{LT}head{GT}" in user_html:
-            user_html = user_html.replace(f"{LT}head{GT}", f"{LT}head{GT}\n{injected}")
-        else:
-            user_html = injected + "\n" + user_html
-
-        if "debug-err-banner" not in user_html:
-            user_html = user_html.replace(f"{LT}body{GT}", f"{LT}body{GT}\n{LT}div id='debug-err-banner'{GT}{LT}/div{GT}")
-        return user_html
-
-    return f"""<!DOCTYPE html>
-<html lang="id">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>{app_title}</title>
-  <style>{PRO_UI_CSS}</style>
-  <script>{PRO_UI_JS}</script>
-</head>
-<body>
-  <div id="debug-err-banner"></div>
-  <header class="app-header">
-    <h1>{app_title}</h1>
-    <span style="font-size:1.2rem;">⚡</span>
-  </header>
-  <div class="container">
-    {user_html}
-  </div>
-</body>
-</html>"""
+def write(path, content):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
 
 def main():
-    raw_name = "ProApp"
-    b64 = None
+    pkg = "com.centoa.jadwal"
+    pkg_path = pathlib.Path(*pkg.split("."))
+    app_title = "Jadwal Mengajar"
 
-    if len(sys.argv) >= 3:
-        raw_name = sys.argv[1]
-        b64 = sys.argv[2]
-    elif PAYLOAD.exists():
-        try:
-            data = json.loads(PAYLOAD.read_text(encoding="utf-8"))
-            raw_name = data.get("app_name", "ProApp")
-            b64 = data.get("html_code_b64") or data.get("xml_code_b64") or data.get("code_b64")
-        except Exception as e:
-            print(f"[WARN] Gagal membaca payload.json: {e}")
-
-    clean_app_name = re.sub(r"[^\w\s-]", "", raw_name).strip() or "ProApp"
-    pkg_suffix = re.sub(r"[^a-zA-Z0-9]", "", clean_app_name).lower() or "proapp"
-    pkg = f"com.stb.{pkg_suffix}"
-
-    if b64:
-        try:
-            raw_html = base64.b64decode(b64).decode("utf-8", errors="ignore")
-        except Exception:
-            raw_html = f"<div class='card'><h2>{clean_app_name}</h2><p>Gagal mendecode HTML payload.</p></div>"
-    else:
-        raw_html = f"<div class='card'><h2>{clean_app_name} Siap!</h2></div>"
-
-    final_html = assemble_pro_html(raw_html, clean_app_name)
-
-    def write(p, content):
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(content, encoding="utf-8")
-
-    # 1. Gradle Wrapper 8.7 & Build Configuration
-    write(
-        ROOT / "gradle" / "wrapper" / "gradle-wrapper.properties",
-        (
-            "distributionBase=GRADLE_USER_HOME\n"
-            "distributionPath=wrapper/dists\n"
-            "distributionUrl=https\\://services.gradle.org/distributions/gradle-8.7-bin.zip\n"
-            "zipStoreBase=GRADLE_USER_HOME\n"
-            "zipStorePath=wrapper/dists\n"
-        ),
+    # 1. Gradle Settings & Wrapper 8.7
+    write(ROOT / "gradle" / "wrapper" / "gradle-wrapper.properties",
+        "distributionBase=GRADLE_USER_HOME\n"
+        "distributionPath=wrapper/dists\n"
+        "distributionUrl=https\\://services.gradle.org/distributions/gradle-8.7-bin.zip\n"
+        "zipStoreBase=GRADLE_USER_HOME\n"
+        "zipStorePath=wrapper/dists\n"
     )
 
-    write(
-        ROOT / "settings.gradle",
-        (
-            "pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }\n"
-            "dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS); repositories { google(); mavenCentral() } }\n"
-            f"rootProject.name = '{pkg_suffix}'\n"
-            "include ':app'\n"
-        ),
+    write(ROOT / "settings.gradle",
+        "pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }\n"
+        "dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS); repositories { google(); mavenCentral() } }\n"
+        "rootProject.name = 'JadwalMengajar'\n"
+        "include ':app'\n"
     )
 
-    write(
-        ROOT / "build.gradle",
-        "plugins { id 'com.android.application' version '8.5.2' apply false }\n",
+    write(ROOT / "build.gradle",
+        "plugins { id 'com.android.application' version '8.5.2' apply false }\n"
     )
 
-    write(
-        ROOT / "gradle.properties",
-        (
-            "org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8\n"
-            "android.useAndroidX=true\n"
-            "android.nonTransitiveRClass=true\n"
-        ),
+    write(ROOT / "gradle.properties",
+        "org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8\n"
+        "android.useAndroidX=true\n"
+        "android.nonTransitiveRClass=true\n"
     )
 
-    write(
-        ROOT / "app" / "build.gradle",
-        (
-            "plugins { id 'com.android.application' }\n\n"
-            "android {\n"
-            f"    namespace '{pkg}'\n"
-            "    compileSdk 34\n\n"
-            "    defaultConfig {\n"
-            f"        applicationId '{pkg}'\n"
-            "        minSdk 21\n"
-            "        targetSdk 34\n"
-            "        versionCode 1\n"
-            "        versionName '1.0'\n"
-            "    }\n"
-            "    buildTypes { release { minifyEnabled false } }\n"
-            "    compileOptions {\n"
-            "        sourceCompatibility JavaVersion.VERSION_17\n"
-            "        targetCompatibility JavaVersion.VERSION_17\n"
-            "    }\n"
-            "}\n"
-            "dependencies {\n"
-            "    implementation 'androidx.webkit:webkit:1.10.0'\n"
-            "}\n"
-        ),
-    )
-
-    # 2. Android Manifest
-    write(
-        ROOT / "app" / "src" / "main" / "AndroidManifest.xml",
-        (
-            f"{LT}?xml version=\"1.0\" encoding=\"utf-8\"?{GT}\n"
-            f"{LT}manifest xmlns:android=\"http://schemas.android.com/apk/res/android\"{GT}\n"
-            f'    {LT}uses-permission android:name="android.permission.INTERNET" /{GT}\n'
-            f'    {LT}uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" /{GT}\n'
-            f'    {LT}uses-permission android:name="android.permission.VIBRATE" /{GT}\n'
-            f"    {LT}application\n"
-            f'        android:allowBackup="true"\n'
-            f'        android:icon="@drawable/ic_launcher"\n'
-            f'        android:label="@string/app_name"\n'
-            f'        android:hardwareAccelerated="true"\n'
-            f'        android:theme="@android:style/Theme.DeviceDefault.NoActionBar"{GT}\n'
-            f"        {LT}activity\n"
-            f'            android:name=".MainActivity"\n'
-            f'            android:configChanges="orientation|screenSize|keyboardHidden"\n'
-            f'            android:exported="true"{GT}\n'
-            f"            {LT}intent-filter{GT}\n"
-            f'                {LT}action android:name="android.intent.action.MAIN" /{GT}\n'
-            f'                {LT}category android:name="android.intent.category.LAUNCHER" /{GT}\n'
-            f"            {LT}/intent-filter{GT}\n"
-            f"        {LT}/activity{GT}\n"
-            f"    {LT}/application{GT}\n"
-            f"{LT}/manifest{GT}\n"
-        ),
-    )
-
-    # 3. Resources
-    write(
-        ROOT / "app" / "src" / "main" / "res" / "values" / "strings.xml",
-        f'{LT}resources{GT}{LT}string name="app_name"{GT}{clean_app_name}{LT}/string{GT}{LT}/resources{GT}',
-    )
-    write(
-        ROOT / "app" / "src" / "main" / "res" / "drawable" / "ic_launcher.xml",
-        (
-            f"{LT}?xml version=\"1.0\" encoding=\"utf-8\"?{GT}\n"
-            f'{LT}vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108"{GT}\n'
-            f'    {LT}path android:fillColor="#0B0F19" android:pathData="M0,0h108v108h-108z"/{GT}\n'
-            f'    {LT}path android:fillColor="#6366F1" android:pathData="M54,20L74,40H60V74H48V40H34L54,20Z"/{GT}\n'
-            f"{LT}/vector{GT}\n"
-        ),
-    )
-
-    # 4. Aset HTML
-    write(ROOT / "app" / "src" / "main" / "assets" / "index.html", final_html)
-
-    # 5. MainActivity
-    java_code = (
-        f"package {pkg};\n\n"
-        "import android.annotation.SuppressLint;\n"
-        "import android.app.Activity;\n"
-        "import android.content.Context;\n"
-        "import android.graphics.Color;\n"
-        "import android.os.Build;\n"
-        "import android.os.Bundle;\n"
-        "import android.os.Vibrator;\n"
-        "import android.view.Window;\n"
-        "import android.view.WindowManager;\n"
-        "import android.webkit.JavascriptInterface;\n"
-        "import android.webkit.WebChromeClient;\n"
-        "import android.webkit.WebResourceRequest;\n"
-        "import android.webkit.WebResourceResponse;\n"
-        "import android.webkit.WebSettings;\n"
-        "import android.webkit.WebView;\n"
-        "import android.webkit.WebViewClient;\n"
-        "import android.widget.Toast;\n"
-        "import androidx.webkit.WebViewAssetLoader;\n\n"
-        "public class MainActivity extends Activity {\n"
-        "    private WebView webView;\n\n"
-        "    @SuppressLint(\"SetJavaScriptEnabled\")\n"
-        "    @Override\n"
-        "    protected void onCreate(Bundle savedInstanceState) {\n"
-        "        super.onCreate(savedInstanceState);\n\n"
-        "        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {\n"
-        "            Window window = getWindow();\n"
-        "            window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);\n"
-        "            window.setStatusBarColor(Color.parseColor(\"#0B0F19\"));\n"
-        "            window.setNavigationBarColor(Color.parseColor(\"#0B0F19\"));\n"
-        "        }\n\n"
-        "        webView = new WebView(this);\n"
-        "        webView.setBackgroundColor(Color.parseColor(\"#0B0F19\"));\n"
-        "        setContentView(webView);\n\n"
-        "        WebSettings ws = webView.getSettings();\n"
-        "        ws.setJavaScriptEnabled(true);\n"
-        "        ws.setDomStorageEnabled(true);\n"
-        "        ws.setDatabaseEnabled(true);\n"
-        "        ws.setAllowFileAccess(false);\n"
-        "        ws.setAllowContentAccess(false);\n"
-        "        ws.setLoadWithOverviewMode(true);\n"
-        "        ws.setUseWideViewPort(true);\n\n"
-        "        final WebViewAssetLoader assetLoader = new WebViewAssetLoader.Builder()\n"
-        "            .addPathHandler(\"/assets/\", new WebViewAssetLoader.AssetsPathHandler(this))\n"
-        "            .build();\n\n"
-        "        webView.setWebViewClient(new WebViewClient() {\n"
-        "            @Override\n"
-        "            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {\n"
-        "                return assetLoader.shouldInterceptRequest(request.getUrl());\n"
-        "            }\n"
-        "        });\n\n"
-        "        webView.setWebChromeClient(new WebChromeClient());\n"
-        "        webView.addJavascriptInterface(new NativeBridge(this), \"Android\");\n\n"
-        "        webView.loadUrl(\"https://appassets.androidplatform.net/assets/index.html\");\n"
-        "    }\n\n"
-        "    @Override\n"
-        "    public void onBackPressed() {\n"
-        "        if (webView != null && webView.canGoBack()) {\n"
-        "            webView.goBack();\n"
-        "        } else {\n"
-        "            super.onBackPressed();\n"
+    # 2. App Gradle (Room DB + Material Components)
+    write(ROOT / "app" / "build.gradle",
+        "plugins { id 'com.android.application' }\n\n"
+        "android {\n"
+        f"    namespace '{pkg}'\n"
+        "    compileSdk 34\n\n"
+        "    defaultConfig {\n"
+        f"        applicationId '{pkg}'\n"
+        "        minSdk 26\n"
+        "        targetSdk 34\n"
+        "        versionCode 1\n"
+        "        versionName '1.5'\n"
+        "    }\n"
+        "    buildTypes {\n"
+        "        release {\n"
+        "            minifyEnabled false\n"
         "        }\n"
-        "    }\n\n"
-        "    public class NativeBridge {\n"
-        "        private final Context context;\n"
-        "        NativeBridge(Context c) { this.context = c; }\n\n"
-        "        @JavascriptInterface\n"
-        "        public void showToast(final String message) {\n"
-        "            runOnUiThread(new Runnable() {\n"
-        "                @Override\n"
-        "                public void run() {\n"
-        "                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show();\n"
-        "                }\n"
-        "            });\n"
-        "        }\n\n"
-        "        @JavascriptInterface\n"
-        "        public void vibrate(final long ms) {\n"
-        "            try {\n"
-        "                Vibrator v = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);\n"
-        "                if (v != null) v.vibrate(ms);\n"
-        "            } catch (Exception ignored) {}\n"
+        "    }\n"
+        "    compileOptions {\n"
+        "        sourceCompatibility JavaVersion.VERSION_17\n"
+        "        targetCompatibility JavaVersion.VERSION_17\n"
+        "    }\n"
+        "}\n\n"
+        "dependencies {\n"
+        "    implementation 'androidx.appcompat:appcompat:1.6.1'\n"
+        "    implementation 'com.google.android.material:material:1.11.0'\n"
+        "    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'\n"
+        "    implementation 'androidx.room:room-runtime:2.6.1'\n"
+        "    annotationProcessor 'androidx.room:room-compiler:2.6.1'\n"
+        "}\n"
+    )
+
+    # 3. Android Manifest (Widget & Permissions)
+    write(ROOT / "app" / "src" / "main" / "AndroidManifest.xml",
+        f"{LT}?xml version=\"1.0\" encoding=\"utf-8\"?{GT}\n"
+        f"{LT}manifest xmlns:android=\"http://schemas.android.com/apk/res/android\"{GT}\n"
+        f'    {LT}uses-permission android:name="android.permission.VIBRATE" /{GT}\n'
+        f"    {LT}application\n"
+        f'        android:allowBackup="true"\n'
+        f'        android:icon="@drawable/ic_launcher"\n'
+        f'        android:label="@string/app_name"\n'
+        f'        android:theme="@style/Theme.Cyberpunk"{GT}\n'
+        f"        {LT}activity\n"
+        f'            android:name=".MainActivity"\n'
+        f'            android:exported="true"{GT}\n"
+        f"            {LT}intent-filter{GT}\n"
+        f'                {LT}action android:name="android.intent.action.MAIN" /{GT}\n'
+        f'                {LT}category android:name="android.intent.category.LAUNCHER" /{GT}\n'
+        f"            {LT}/intent-filter{GT}\n"
+        f"        {LT}/activity{GT}\n\n"
+        f"        {LT}receiver\n"
+        f'            android:name=".ScheduleWidgetProvider"\n'
+        f'            android:exported="true"{GT}\n'
+        f"            {LT}intent-filter{GT}\n"
+        f'                {LT}action android:name="android.appwidget.action.APPWIDGET_UPDATE" /{GT}\n'
+        f"            {LT}/intent-filter{GT}\n"
+        f'            {LT}meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_info" /{GT}\n'
+        f"        {LT}/receiver{GT}\n"
+        f"    {LT}/application{GT}\n"
+        f"{LT}/manifest{GT}\n"
+    )
+
+    # 4. Resources: Colors, Themes, Strings, Widget Info
+    write(ROOT / "app" / "src" / "main" / "res" / "values" / "colors.xml",
+        f"{LT}?xml version=\"1.0\" encoding=\"utf-8\"?{GT}\n"
+        f"{LT}resources{GT}\n"
+        f"    {LT}color name=\"cyber_bg\"{GT}#070D18{LT}/color{GT}\n"
+        f"    {LT}color name=\"cyber_card\"{GT}#0F2744{LT}/color{GT}\n"
+        f"    {LT}color name=\"cyber_cyan\"{GT}#00D4AA{LT}/color{GT}\n"
+        f"    {LT}color name=\"cyber_magenta\"{GT}#FF00FF{LT}/color{GT}\n"
+        f"    {LT}color name=\"text_white\"{GT}#F8FAFC{LT}/color{GT}\n"
+        f"    {LT}color name=\"text_dim\"{GT}#8EA5C8{LT}/color{GT}\n"
+        f"{LT}/resources{GT}\n"
+    )
+
+    write(ROOT / "app" / "src" / "main" / "res" / "values" / "styles.xml",
+        f"{LT}?xml version=\"1.0\" encoding=\"utf-8\"?{GT}\n"
+        f"{LT}resources{GT}\n"
+        f'    {LT}style name="Theme.Cyberpunk" parent="Theme.MaterialComponents.DayNight.NoActionBar"{GT}\n'
+        f'        {LT}item name="android:windowBackground"{GT}@color/cyber_bg{LT}/item{GT}\n'
+        f'        {LT}item name="android:statusBarColor"{GT}@color/cyber_bg{LT}/item{GT}\n'
+        f'        {LT}item name="android:navigationBarColor"{GT}@color/cyber_bg{LT}/item{GT}\n'
+        f'        {LT}item name="colorPrimary"{GT}@color/cyber_cyan{LT}/item{GT}\n'
+        f'        {LT}item name="colorSecondary"{GT}@color/cyber_magenta{LT}/item{GT}\n'
+        f"    {LT}/style{GT}\n"
+        f"{LT}/resources{GT}\n"
+    )
+
+    write(ROOT / "app" / "src" / "main" / "res" / "values" / "strings.xml",
+        f"{LT}resources{GT}{LT}string name=\"app_name\"{GT}{app_title}{LT}/string{GT}{LT}/resources{GT}"
+    )
+
+    write(ROOT / "app" / "src" / "main" / "res" / "drawable" / "ic_launcher.xml",
+        f"{LT}?xml version=\"1.0\" encoding=\"utf-8\"?{GT}\n"
+        f'{LT}vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108"{GT}\n'
+        f'    {LT}path android:fillColor="#070D18" android:pathData="M0,0h108v108h-108z"/{GT}\n'
+        f'    {LT}path android:fillColor="#00D4AA" android:pathData="M30,30h48v48h-48z"/{GT}\n'
+        f'    {LT}path android:fillColor="#FF00FF" android:pathData="M44,44h20v20h-20z"/{GT}\n'
+        f"{LT}/vector{GT}\n"
+    )
+
+    write(ROOT / "app" / "src" / "main" / "res" / "xml" / "widget_info.xml",
+        f"{LT}?xml version=\"1.0\" encoding=\"utf-8\"?{GT}\n"
+        f'{LT}appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"\n'
+        f'    android:minWidth="250dp"\n'
+        f'    android:minHeight="110dp"\n'
+        f'    android:updatePeriodMillis="60000"\n'
+        f'    android:initialLayout="@layout/widget_layout"\n'
+        f'    android:resizeMode="horizontal|vertical"\n'
+        f'    android:widgetCategory="home_screen" /{GT}\n'
+    )
+
+    # 5. XML Layouts
+    write(ROOT / "app" / "src" / "main" / "res" / "layout" / "widget_layout.xml",
+        f"{LT}?xml version=\"1.0\" encoding=\"utf-8\"?{GT}\n"
+        f'{LT}LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"\n'
+        f'    android:layout_width="match_parent"\n'
+        f'    android:layout_height="match_parent"\n'
+        f'    android:background="#0F2744"\n'
+        f'    android:orientation="vertical"\n'
+        f'    android:padding="14dp"{GT}\n'
+        f'    {LT}TextView android:id="@+id/txt_widget_clock" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="07:30" android:textColor="#00D4AA" android:textSize="22sp" android:textStyle="bold" /{GT}\n'
+        f'    {LT}TextView android:id="@+id/txt_widget_status" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Jadwal Hari Ini: Siap Mengajar" android:textColor="#F8FAFC" android:textSize="13sp" android:layout_marginTop="4dp" /{GT}\n'
+        f"{LT}/LinearLayout{GT}\n"
+    )
+
+    write(ROOT / "app" / "src" / "main" / "res" / "layout" / "activity_main.xml",
+        f"{LT}?xml version=\"1.0\" encoding=\"utf-8\"?{GT}\n"
+        f'{LT}RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"\n'
+        f'    android:layout_width="match_parent"\n'
+        f'    android:layout_height="match_parent"\n'
+        f'    android:background="@color/cyber_bg"{GT}\n'
+        f'    {LT}ScrollView android:layout_width="match_parent" android:layout_height="match_parent" android:layout_above="@id/bottom_nav"{GT}\n'
+        f'        {LT}LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="18dp"{GT}\n'
+        f'            {LT}TextView android:id="@+id/txt_clock" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="12:00:00" android:textColor="@color/cyber_cyan" android:textSize="32sp" android:textStyle="bold" /{GT}\n'
+        f'            {LT}TextView android:id="@+id/txt_profile" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Guru: Centoa | Sekolah: SMK Cyber" android:textColor="@color/text_dim" android:textSize="14sp" android:layout_marginBottom="16dp" /{GT}\n'
+        f'            {LT}LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:weightSum="3" android:layout_marginBottom="16dp"{GT}\n'
+        f'                {LT}TextView android:id="@+id/stat_total" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@color/cyber_card" android:padding="12dp" android:gravity="center" android:text="12\\nJADWAL" android:textColor="@color/text_white" /{GT}\n'
+        f'                {LT}TextView android:id="@+id/stat_kelas" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@color/cyber_card" android:layout_marginStart="8dp" android:padding="12dp" android:gravity="center" android:text="4\\nKELAS" android:textColor="@color/cyber_cyan" /{GT}\n'
+        f'                {LT}TextView android:id="@+id/stat_ruang" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@color/cyber_card" android:layout_marginStart="8dp" android:padding="12dp" android:gravity="center" android:text="3\\nRUANG" android:textColor="@color/cyber_magenta" /{GT}\n'
+        f'            {LT}/LinearLayout{GT}\n'
+        f'            {LT}TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="DAFTAR JADWAL HARI INI" android:textColor="@color/cyber_cyan" android:textSize="16sp" android:textStyle="bold" android:layout_marginBottom="10dp" /{GT}\n'
+        f'            {LT}LinearLayout android:id="@+id/schedule_list_container" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" /{GT}\n'
+        f'        {LT}/LinearLayout{GT}\n'
+        f'    {LT}/ScrollView{GT}\n'
+        f'    {LT}LinearLayout android:id="@+id/bottom_nav" android:layout_width="match_parent" android:layout_height="60dp" android:layout_alignParentBottom="true" android:background="@color/cyber_card" android:orientation="horizontal" android:weightSum="3"{GT}\n'
+        f'        {LT}TextView android:id="@+id/nav_dashboard" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:text="DASHBOARD" android:textColor="@color/cyber_cyan" android:textStyle="bold" /{GT}\n'
+        f'        {LT}TextView android:id="@+id/nav_jadwal" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:text="JADWAL" android:textColor="@color/text_dim" /{GT}\n'
+        f'        {LT}TextView android:id="@+id/nav_export" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:text="EXPORT PDF" android:textColor="@color/text_dim" /{GT}\n'
+        f'    {LT}/LinearLayout{GT}\n'
+        f"{LT}/RelativeLayout{GT}\n"
+    )
+
+    # 6. Room Database Source Code (Java)
+    src_dir = ROOT / "app" / "src" / "main" / "java" / pkg_path
+
+    # Entity
+    write(src_dir / "Schedule.java",
+        f"package {pkg};\n\n"
+        "import androidx.room.Entity;\n"
+        "import androidx.room.PrimaryKey;\n\n"
+        "@Entity(tableName = \"schedules\")\n"
+        "public class Schedule {\n"
+        "    @PrimaryKey(autoGenerate = true)\n"
+        "    public int id;\n"
+        "    public String hari;\n"
+        "    public String jam;\n"
+        "    public String mapel;\n"
+        "    public String kelas;\n"
+        "    public String ruangan;\n\n"
+        "    public Schedule(String hari, String jam, String mapel, String kelas, String ruangan) {\n"
+        "        this.hari = hari;\n"
+        "        this.jam = jam;\n"
+        "        this.mapel = mapel;\n"
+        "        this.kelas = kelas;\n"
+        "        this.ruangan = ruangan;\n"
+        "    }\n"
+        "}\n"
+    )
+
+    # DAO
+    write(src_dir / "ScheduleDao.java",
+        f"package {pkg};\n\n"
+        "import androidx.room.Dao;\n"
+        "import androidx.room.Insert;\n"
+        "import androidx.room.Query;\n"
+        "import java.util.List;\n\n"
+        "@Dao\n"
+        "public interface ScheduleDao {\n"
+        "    @Query(\"SELECT * FROM schedules\")\n"
+        "    List<Schedule> getAll();\n\n"
+        "    @Insert\n"
+        "    void insertAll(Schedule... schedules);\n\n"
+        "    @Query(\"SELECT COUNT(*) FROM schedules\")\n"
+        "    int count();\n"
+        "}\n"
+    )
+
+    # AppDatabase
+    write(src_dir / "AppDatabase.java",
+        f"package {pkg};\n\n"
+        "import androidx.room.Database;\n"
+        "import androidx.room.Room;\n"
+        "import androidx.room.RoomDatabase;\n"
+        "import android.content.Context;\n\n"
+        "@Database(entities = {Schedule.class}, version = 1, exportSchema = false)\n"
+        "public abstract class AppDatabase extends RoomDatabase {\n"
+        "    public abstract ScheduleDao scheduleDao();\n"
+        "    private static AppDatabase instance;\n\n"
+        "    public static synchronized AppDatabase getInstance(Context context) {\n"
+        "        if (instance == null) {\n"
+        "            instance = Room.databaseBuilder(context.getApplicationContext(),\n"
+        "                    AppDatabase.class, \"jadwal_db\")\n"
+        "                    .allowMainThreadQueries()\n"
+        "                    .build();\n"
+        "        }\n"
+        "        return instance;\n"
+        "    }\n"
+        "}\n"
+    )
+
+    # Widget Provider
+    write(src_dir / "ScheduleWidgetProvider.java",
+        f"package {pkg};\n\n"
+        "import android.appwidget.AppWidgetManager;\n"
+        "import android.appwidget.AppWidgetProvider;\n"
+        "import android.content.Context;\n"
+        "import android.widget.RemoteViews;\n"
+        "import java.text.SimpleDateFormat;\n"
+        "import java.util.Date;\n"
+        "import java.util.Locale;\n\n"
+        "public class ScheduleWidgetProvider extends AppWidgetProvider {\n"
+        "    @Override\n"
+        "    public void onUpdate(Context context, AppWidgetManager appWidgetManager, int[] appWidgetIds) {\n"
+        "        for (int id : appWidgetIds) {\n"
+        "            RemoteViews views = new RemoteViews(context.getPackageName(), R.layout.widget_layout);\n"
+        "            String time = new SimpleDateFormat(\"HH:mm\", Locale.getDefault()).format(new Date());\n"
+        "            views.setTextViewText(R.id.txt_widget_clock, time);\n"
+        "            views.setTextViewText(R.id.txt_widget_status, \"Jadwal Aktif Hari Ini\");\n"
+        "            appWidgetManager.updateAppWidget(id, views);\n"
         "        }\n"
         "    }\n"
         "}\n"
     )
 
-    java_dir = ROOT / "app" / "src" / "main" / "java" / pathlib.Path(*pkg.split("."))
-    write(java_dir / "MainActivity.java", java_code)
-    print(f"[OK] Android Shell siap untuk {clean_app_name} ({pkg})")
+    # MainActivity
+    write(src_dir / "MainActivity.java",
+        f"package {pkg};\n\n"
+        "import android.app.Activity;\n"
+        "import android.os.Bundle;\n"
+        "import android.os.Handler;\n"
+        "import android.os.Looper;\n"
+        "import android.widget.LinearLayout;\n"
+        "import android.widget.TextView;\n"
+        "import android.graphics.Color;\n"
+        "import java.text.SimpleDateFormat;\n"
+        "import java.util.Date;\n"
+        "import java.util.List;\n"
+        "import java.util.Locale;\n\n"
+        "public class MainActivity extends Activity {\n"
+        "    private TextView txtClock;\n"
+        "    private Handler handler = new Handler(Looper.getMainLooper());\n\n"
+        "    @Override\n"
+        "    protected void onCreate(Bundle savedInstanceState) {\n"
+        "        super.onCreate(savedInstanceState);\n"
+        "        setContentView(R.layout.activity_main);\n\n"
+        "        txtClock = findViewById(R.id.txt_clock);\n"
+        "        startClock();\n\n"
+        "        AppDatabase db = AppDatabase.getInstance(this);\n"
+        "        if (db.scheduleDao().count() == 0) {\n"
+        "            db.scheduleDao().insertAll(\n"
+        "                new Schedule(\"Senin\", \"07:30 - 09:00\", \"Pemrograman Web\", \"XII-RPL 1\", \"Lab Software\"),\n"
+        "                new Schedule(\"Senin\", \"09:15 - 11:30\", \"Basis Data\", \"XI-RPL 2\", \"Lab Komputer 3\"),\n"
+        "                new Schedule(\"Selasa\", \"08:00 - 10:00\", \"Sistem Operasi\", \"X-TKJ 1\", \"Ruang 12\"),\n"
+        "                new Schedule(\"Rabu\", \"10:00 - 12:00\", \"Mobile App Dev\", \"XII-RPL 2\", \"Lab Inovasi\")\n"
+        "            );\n"
+        "        }\n\n"
+        "        renderSchedules(db.scheduleDao().getAll());\n"
+        "    }\n\n"
+        "    private void startClock() {\n"
+        "        handler.post(new Runnable() {\n"
+        "            @Override\n"
+        "            public void run() {\n"
+        "                String time = new SimpleDateFormat(\"HH:mm:ss\", Locale.getDefault()).format(new Date());\n"
+        "                if (txtClock != null) txtClock.setText(time);\n"
+        "                handler.postDelayed(this, 1000);\n"
+        "            }\n"
+        "        });\n"
+        "    }\n\n"
+        "    private void renderSchedules(List<Schedule> list) {\n"
+        "        LinearLayout container = findViewById(R.id.schedule_list_container);\n"
+        "        container.removeAllViews();\n"
+        "        for (Schedule s : list) {\n"
+        "            TextView item = new TextView(this);\n"
+        "            item.setText(s.jam + \" | \" + s.mapel + \"\\n\" + s.kelas + \" (\" + s.ruangan + \")\");\n"
+        "            item.setTextColor(Color.WHITE);\n"
+        "            item.setTextSize(14f);\n"
+        "            item.setPadding(24, 20, 24, 20);\n"
+        "            item.setBackgroundColor(Color.parseColor(\"#0F2744\"));\n"
+        "            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(\n"
+        "                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);\n"
+        "            lp.setMargins(0, 0, 0, 16);\n"
+        "            item.setLayoutParams(lp);\n"
+        "            container.addView(item);\n"
+        "        }\n"
+        "    }\n"
+        "}\n"
+    )
+
+    print(f"[OK] Pure Native Android Project ({pkg}) berhasil dirakit!")
 
 if __name__ == "__main__":
     main()
