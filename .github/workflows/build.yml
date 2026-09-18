@@ -1,8 +1,8 @@
-name: Build Dynamic Heavy APK
+name: Build Dynamic APK
 
 on:
   repository_dispatch:
-    types: [build_apk]
+    types: [build_dynamic_apk]
   workflow_dispatch:
     inputs:
       chat_id:
