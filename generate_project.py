@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Universal Native Shell (Pro Edition - Capacitor/AndroidX Architecture)
-- Menggunakan AndroidX WebViewAssetLoader (Domain HTTPS Resmi).
-- Injeksi Otomatis Pro Mobile UI Design System (Glassmorphism, Bottom Nav, Haptic).
-- 100% Offline-First, Zero-CDN, Anti-Blank Screen.
+Universal Native Shell (Dual Input: CLI Args + Payload JSON)
+- Mendukung pemanggilan via argumen CLI maupun file payload.json.
+- Menggunakan AndroidX WebViewAssetLoader (HTTPS Domain Resmi).
+- Built-in Pro Mobile UI Kit (Glassmorphism & Haptic) 100% Offline.
 """
 import base64
 import json
@@ -18,9 +18,6 @@ PAYLOAD = pathlib.Path("payload.json")
 LT = chr(60)
 GT = chr(62)
 
-# ==============================================================================
-# PRO MOBILE UI KIT (CSS & JS Framework Bawaan - Offline 100%)
-# ==============================================================================
 PRO_UI_CSS = """
 :root {
   --bg-main: #0B0F19;
@@ -52,7 +49,6 @@ body {
   overflow-x: hidden;
   padding-bottom: calc(75px + var(--safe-bottom));
 }
-/* Top App Bar */
 .app-header {
   position: sticky;
   top: 0;
@@ -74,7 +70,6 @@ body {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
-/* Content Container */
 .container {
   padding: 16px;
   display: flex;
@@ -82,7 +77,6 @@ body {
   gap: 14px;
   flex: 1;
 }
-/* Cards */
 .card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
@@ -91,10 +85,7 @@ body {
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
   transition: transform 0.15s ease;
 }
-.card:active {
-  transform: scale(0.99);
-}
-/* Stat Grid */
+.card:active { transform: scale(0.99); }
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -107,11 +98,7 @@ body {
   padding: 12px;
   text-align: center;
 }
-.stat-val {
-  font-size: 1.5rem;
-  font-weight: 800;
-  color: #F8FAFC;
-}
+.stat-val { font-size: 1.5rem; font-weight: 800; color: #F8FAFC; }
 .stat-lbl {
   font-size: 0.75rem;
   color: var(--text-muted);
@@ -119,7 +106,6 @@ body {
   letter-spacing: 0.05em;
   margin-top: 2px;
 }
-/* Buttons */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -137,36 +123,12 @@ body {
   transition: all 0.15s ease;
   width: 100%;
 }
-.btn:active {
-  transform: scale(0.97);
-  opacity: 0.9;
-}
-.btn-emerald {
-  background: var(--accent-emerald);
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
-}
-.btn-danger {
-  background: var(--danger);
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.35);
-}
-.btn-secondary {
-  background: var(--bg-card-hover);
-  border: 1px solid var(--border-color);
-  color: var(--text-main);
-  box-shadow: none;
-}
-/* Input & Form */
-.input-group {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 12px;
-}
-.input-group label {
-  font-size: 0.8rem;
-  color: var(--text-muted);
-  font-weight: 500;
-}
+.btn:active { transform: scale(0.97); opacity: 0.9; }
+.btn-emerald { background: var(--accent-emerald); box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35); }
+.btn-danger { background: var(--danger); box-shadow: 0 4px 12px rgba(239, 68, 68, 0.35); }
+.btn-secondary { background: var(--bg-card-hover); border: 1px solid var(--border-color); color: var(--text-main); }
+.input-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.input-group label { font-size: 0.8rem; color: var(--text-muted); font-weight: 500; }
 .input-field {
   background: #0B0F19;
   border: 1px solid var(--border-color);
@@ -175,12 +137,8 @@ body {
   color: #FFFFFF;
   font-size: 0.95rem;
   outline: none;
-  transition: border-color 0.2s;
 }
-.input-field:focus {
-  border-color: var(--accent-primary);
-}
-/* Checklist & Item Row */
+.input-field:focus { border-color: var(--accent-primary); }
 .item-row {
   display: flex;
   align-items: center;
@@ -192,11 +150,7 @@ body {
   margin-bottom: 8px;
   gap: 10px;
 }
-.item-row.done {
-  opacity: 0.5;
-  text-decoration: line-through;
-}
-/* Bottom Navigation Bar (Pro Native Feel) */
+.item-row.done { opacity: 0.5; text-decoration: line-through; }
 .tab-bar {
   position: fixed;
   bottom: 0;
@@ -228,13 +182,8 @@ body {
   flex: 1;
   height: 100%;
 }
-.tab-item.active {
-  color: #A5B4FC;
-}
-.tab-item .icon {
-  font-size: 1.25rem;
-}
-/* Error Banner */
+.tab-item.active { color: #A5B4FC; }
+.tab-item .icon { font-size: 1.25rem; }
 #debug-err-banner {
   position: fixed;
   top: 0;
@@ -250,7 +199,6 @@ body {
 """
 
 PRO_UI_JS = """
-// 1. Error Catcher Aktif
 window.onerror = function(msg, url, line) {
   var b = document.getElementById('debug-err-banner');
   if (b) {
@@ -258,8 +206,6 @@ window.onerror = function(msg, url, line) {
     b.innerHTML += '⚠️ <b>JS Error:</b> ' + msg + ' (L:' + line + ')<br>';
   }
 };
-
-// 2. Safe Database Persistence Layer
 window.DB = {
   get: function(key, defaultVal) {
     try {
@@ -274,24 +220,14 @@ window.DB = {
     } catch(e) { return false; }
   }
 };
-
-// 3. Jembatan Native Hardware
 window.Native = {
   toast: function(msg) {
-    if (window.Android && window.Android.showToast) {
-      window.Android.showToast(msg);
-    } else {
-      console.log("[Toast]", msg);
-    }
+    if (window.Android && window.Android.showToast) { window.Android.showToast(msg); }
   },
   vibrate: function(ms) {
-    if (window.Android && window.Android.vibrate) {
-      window.Android.vibrate(ms || 40);
-    }
+    if (window.Android && window.Android.vibrate) { window.Android.vibrate(ms || 40); }
   }
 };
-
-// Haptic feedback otomatis di semua tombol
 document.addEventListener('DOMContentLoaded', function() {
   document.querySelectorAll('button, .card, .tab-item').forEach(function(el) {
     el.addEventListener('click', function() { Native.vibrate(25); });
@@ -309,21 +245,18 @@ def clean_html_code(raw_code):
 
 def assemble_pro_html(user_html, app_title):
     user_html = clean_html_code(user_html)
-    
-    # Jika kode AI sudah berupa dokumen utuh
+    injected = f"{LT}style{GT}{PRO_UI_CSS}{LT}/style{GT}\n{LT}script{GT}{PRO_UI_JS}{LT}/script{GT}"
+
     if f"{LT}body" in user_html.lower():
-        # Sisipkan CSS & JS Pro di tag head
-        injected = f"{LT}style{GT}{PRO_UI_CSS}{LT}/style{GT}\n{LT}script{GT}{PRO_UI_JS}{LT}/script{GT}"
         if f"{LT}head{GT}" in user_html:
             user_html = user_html.replace(f"{LT}head{GT}", f"{LT}head{GT}\n{injected}")
         else:
             user_html = injected + "\n" + user_html
-            
+
         if "debug-err-banner" not in user_html:
             user_html = user_html.replace(f"{LT}body{GT}", f"{LT}body{GT}\n{LT}div id='debug-err-banner'{GT}{LT}/div{GT}")
         return user_html
-    
-    # Jika AI hanya mengeluarkan isi body/komponen
+
     return f"""<!DOCTYPE html>
 <html lang="id">
 <head>
@@ -339,7 +272,6 @@ def assemble_pro_html(user_html, app_title):
     <h1>{app_title}</h1>
     <span style="font-size:1.2rem;">⚡</span>
   </header>
-  
   <div class="container">
     {user_html}
   </div>
@@ -347,18 +279,31 @@ def assemble_pro_html(user_html, app_title):
 </html>"""
 
 def main():
-    if not PAYLOAD.exists():
-        sys.exit("[FATAL] payload.json tidak ada!")
+    raw_name = "ProApp"
+    b64 = None
 
-    data = json.loads(PAYLOAD.read_text(encoding="utf-8"))
-    raw_name = data.get("app_name", "ProApp")
+    # Jalur 1: Baca dari argumen command-line (jika dipanggil: python generate_project.py "$APP_NAME" "$HTML_B64")
+    if len(sys.argv) >= 3:
+        raw_name = sys.argv[1]
+        b64 = sys.argv[2]
+    # Jalur 2: Baca dari payload.json (jika dibuat oleh step workflow)
+    elif PAYLOAD.exists():
+        try:
+            data = json.loads(PAYLOAD.read_text(encoding="utf-8"))
+            raw_name = data.get("app_name", "ProApp")
+            b64 = data.get("html_code_b64") or data.get("xml_code_b64") or data.get("code_b64")
+        except Exception as e:
+            print(f"[WARN] Gagal membaca payload.json: {e}")
+
     clean_app_name = re.sub(r"[^\w\s-]", "", raw_name).strip() or "ProApp"
     pkg_suffix = re.sub(r"[^a-zA-Z0-9]", "", clean_app_name).lower() or "proapp"
     pkg = f"com.stb.{pkg_suffix}"
 
-    b64 = data.get("html_code_b64") or data.get("xml_code_b64") or data.get("code_b64")
     if b64:
-        raw_html = base64.b64decode(b64).decode("utf-8", errors="ignore")
+        try:
+            raw_html = base64.b64decode(b64).decode("utf-8", errors="ignore")
+        except Exception:
+            raw_html = f"<div class='card'><h2>{clean_app_name}</h2><p>Gagal mendecode HTML payload.</p></div>"
     else:
         raw_html = f"<div class='card'><h2>{clean_app_name} Siap!</h2></div>"
 
@@ -368,7 +313,7 @@ def main():
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(content, encoding="utf-8")
 
-    # 1. Gradle Settings & Dependencies
+    # 1. Gradle Files
     write(
         ROOT / "settings.gradle",
         (
@@ -393,7 +338,6 @@ def main():
         ),
     )
 
-    # 2. App Gradle dengan AndroidX WebKit
     write(
         ROOT / "app" / "build.gradle",
         (
@@ -420,7 +364,7 @@ def main():
         ),
     )
 
-    # 3. Android Manifest
+    # 2. Android Manifest
     write(
         ROOT / "app" / "src" / "main" / "AndroidManifest.xml",
         (
@@ -449,7 +393,7 @@ def main():
         ),
     )
 
-    # 4. Resources
+    # 3. Resources
     write(
         ROOT / "app" / "src" / "main" / "res" / "values" / "strings.xml",
         f'{LT}resources{GT}{LT}string name="app_name"{GT}{clean_app_name}{LT}/string{GT}{LT}/resources{GT}',
@@ -465,10 +409,10 @@ def main():
         ),
     )
 
-    # 5. Tulis file HTML ke Assets
+    # 4. Aset HTML
     write(ROOT / "app" / "src" / "main" / "assets" / "index.html", final_html)
 
-    # 6. MainActivity Berbasis AndroidX WebViewAssetLoader (Standar Capacitor)
+    # 5. MainActivity (AndroidX WebViewAssetLoader)
     java_code = (
         f"package {pkg};\n\n"
         "import android.annotation.SuppressLint;\n"
@@ -523,7 +467,6 @@ def main():
         "        });\n\n"
         "        webView.setWebChromeClient(new WebChromeClient());\n"
         "        webView.addJavascriptInterface(new NativeBridge(this), \"Android\");\n\n"
-        "        // Membuka file dari domain HTTPS virtual resmi Google (Bebas Blank & Storage Aktif)\n"
         "        webView.loadUrl(\"https://appassets.androidplatform.net/assets/index.html\");\n"
         "    }\n\n"
         "    @Override\n"
@@ -559,8 +502,7 @@ def main():
 
     java_dir = ROOT / "app" / "src" / "main" / "java" / pathlib.Path(*pkg.split("."))
     write(java_dir / "MainActivity.java", java_code)
-    print(f"[PRO OK] Shell Industri siap untuk {clean_app_name} ({pkg})")
-
+    print(f"[OK] Android Shell siap untuk {clean_app_name} ({pkg})")
 
 if __name__ == "__main__":
     main()
