@@ -26,7 +26,7 @@ jobs:
       - name: 1. Checkout Repository
         uses: actions/checkout@v4
 
-      - name: 2. Setup Python Environment
+      - name: 2. Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -41,7 +41,7 @@ jobs:
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses || true
 
-      - name: 5. Generate Android Project Structure
+      - name: 5. Generate Android Project Files
         env:
           CHAT_ID: ${{ github.event.client_payload.chat_id || inputs.chat_id }}
           APP_NAME: ${{ github.event.client_payload.app_name || inputs.app_name || 'GeneratedApp' }}
@@ -49,8 +49,12 @@ jobs:
         run: |
           python generate_project.py "$APP_NAME" "$HTML_B64"
 
-      - name: 6. Compile APK via Gradle
+      - name: 6. Inisialisasi Wrapper & Kompilasi APK
         run: |
+          if [ ! -f "gradlew" ]; then
+            echo "gradlew tidak ditemukan. Membuat Gradle Wrapper 8.4..."
+            gradle wrapper --gradle-version 8.4 --distribution-type bin
+          fi
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon --stacktrace
 
@@ -63,14 +67,14 @@ jobs:
           APK_PATH=$(find app/build/outputs/apk/debug -name "*.apk" | head -n 1)
           
           if [ -z "$APK_PATH" ]; then
-            echo "File APK tidak ditemukan!"
+            echo "Gagal menemukan file APK hasil kompilasi!"
             exit 1
           fi
 
-          echo "Mengirim $APK_PATH ke Telegram Chat ID: $CHAT_ID"
+          echo "Mengirim $APK_PATH ke chat Telegram ID: $CHAT_ID"
           
           curl -v -F chat_id="$CHAT_ID" \
                -F document=@"$APK_PATH" \
-               -F caption="✅ Aplikasi *$APP_NAME* berhasil dikompilasi! Silakan unduh dan install di HP." \
+               -F caption="✅ Aplikasi *$APP_NAME* berhasil dibuat dan siap diuji!" \
                -F parse_mode="Markdown" \
                "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument"
