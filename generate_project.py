@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """
-Industrial Dynamic Android Engine (Pro Gym & Universal Studio Edition)
-- Pre-baked Pro Glassmorphism & Cyberpunk Neon UI Kit.
-- Built-in Mock Data: Tidak akan pernah kosong saat baru diinstall.
-- Stopwatch Timer Istirahat 60s, Auto-Tab Router, Real-time Calculation.
-- Room/LocalStorage persistent database & Haptic Vibrate feedback.
+Industrial Dynamic Android Engine (Universal Studio Edition)
+- Syntax Error Fixed: String JS dan Python terisolasi sempurna.
+- Dynamic Multi-App: Mendukung Kasir, Gym, Jadwal, Habit, dll.
+- Pre-baked Material Components & AndroidX WebViewAssetLoader.
 """
 import base64
 import json
@@ -88,7 +87,6 @@ body {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
-/* Cards & Neon Widgets */
 .glass-card {
   background: var(--bg-card);
   border: 1px solid var(--bg-card-border);
@@ -113,8 +111,6 @@ body {
 }
 .stat-val { font-size: 1.35rem; font-weight: 800; color: var(--primary-neon); }
 .stat-lbl { font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase; margin-top: 2px; }
-
-/* Progress & Checkbox */
 .progress-bar-bg {
   width: 100%;
   height: 8px;
@@ -166,8 +162,6 @@ body {
 }
 .btn-action:active { transform: scale(0.98); }
 .btn-danger { background: var(--accent-rose); color: white; box-shadow: 0 4px 20px rgba(244, 63, 94, 0.3); }
-
-/* Navigation Tab Bar */
 .tab-bar {
   position: fixed;
   bottom: 0;
@@ -228,8 +222,6 @@ window.Native = {
     if (window.Android && window.Android.vibrate) { window.Android.vibrate(ms || 35); }
   }
 };
-
-// Auto Tab Switcher Global
 window.switchTab = function(targetId) {
   if (!targetId) return;
   targetId = targetId.replace('#', '');
@@ -253,7 +245,6 @@ window.switchTab = function(targetId) {
   });
   Native.vibrate(25);
 };
-
 document.addEventListener('click', function(e) {
   var tabBtn = e.target.closest('.tab-item');
   if (tabBtn) {
@@ -271,202 +262,193 @@ document.addEventListener('click', function(e) {
 });
 """
 
-# Template Aplikasi Lengkap yang Selalu Menyertakan Data Default & Interaktif
-def build_fallback_pro_gym_html(app_title):
-    return f"""
-    <!-- VIEW 1: DASHBOARD -->
-    <section id="tab-dashboard" class="view active">
-      <div class="glass-card">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-          <div>
-            <h2 style="font-size:1.1rem; font-weight:700;">Progress Hari Ini</h2>
-            <p style="font-size:0.8rem; color:var(--text-muted);">Target Latihan Otot & Kardio</p>
-          </div>
-          <span id="progress-text" style="font-size:1.2rem; font-weight:800; color:var(--primary-neon);">0%</span>
-        </div>
-        <div class="progress-bar-bg">
-          <div id="progress-bar" class="progress-bar-fill"></div>
-        </div>
-        <div class="stat-grid">
-          <div class="stat-box"><div id="stat-total" class="stat-val">5</div><div class="stat-lbl">Gerakan</div></div>
-          <div class="stat-box"><div id="stat-done" class="stat-val">0</div><div class="stat-lbl">Selesai</div></div>
-          <div class="stat-box"><div id="stat-cal" class="stat-val">0</div><div class="stat-lbl">Kkal</div></div>
-        </div>
+DEFAULT_FALLBACK_UI = """
+<!-- VIEW 1: DASHBOARD -->
+<section id="tab-dashboard" class="view active">
+  <div class="glass-card">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <div>
+        <h2 style="font-size:1.1rem; font-weight:700;">Progress Hari Ini</h2>
+        <p style="font-size:0.8rem; color:var(--text-muted);">Target Latihan Otot & Kardio</p>
       </div>
+      <span id="progress-text" style="font-size:1.2rem; font-weight:800; color:var(--primary-neon);">0%</span>
+    </div>
+    <div class="progress-bar-bg">
+      <div id="progress-bar" class="progress-bar-fill"></div>
+    </div>
+    <div class="stat-grid">
+      <div class="stat-box"><div id="stat-total" class="stat-val">5</div><div class="stat-lbl">Gerakan</div></div>
+      <div class="stat-box"><div id="stat-done" class="stat-val">0</div><div class="stat-lbl">Selesai</div></div>
+      <div class="stat-box"><div id="stat-cal" class="stat-val">0</div><div class="stat-lbl">Kkal</div></div>
+    </div>
+  </div>
 
-      <!-- TIMER ISTIRAHAT -->
-      <div class="glass-card" style="text-align:center;">
-        <span style="font-size:0.75rem; text-transform:uppercase; color:var(--text-muted); letter-spacing:0.05em;">Timer Istirahat Set</span>
-        <div id="timer-display" style="font-size:2.8rem; font-weight:900; color:var(--primary-neon); margin:4px 0;">00:60</div>
-        <div style="display:flex; gap:10px;">
-          <button class="btn-action" style="flex:1;" onclick="startRestTimer(60)">⏱️ Mulai 60s</button>
-          <button class="btn-action btn-danger" style="width:70px;" onclick="resetTimer()">Reset</button>
-        </div>
-      </div>
-    </section>
+  <div class="glass-card" style="text-align:center;">
+    <span style="font-size:0.75rem; text-transform:uppercase; color:var(--text-muted); letter-spacing:0.05em;">Timer Istirahat Set</span>
+    <div id="timer-display" style="font-size:2.8rem; font-weight:900; color:var(--primary-neon); margin:4px 0;">00:60</div>
+    <div style="display:flex; gap:10px;">
+      <button class="btn-action" style="flex:1;" onclick="startRestTimer(60)">⏱️ Mulai 60s</button>
+      <button class="btn-action btn-danger" style="width:70px;" onclick="resetTimer()">Reset</button>
+    </div>
+  </div>
+</section>
 
-    <!-- VIEW 2: LATIHAN DUMBBELL & PULLEY -->
-    <section id="tab-latihan" class="view">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-        <h2 style="font-size:1.15rem; font-weight:800; color:var(--primary-neon);">Daftar Latihan</h2>
-        <button onclick="resetAllExercises()" style="background:none; border:none; color:var(--accent-rose); font-size:0.8rem; font-weight:600;">Reset Harian</button>
-      </div>
-      <div id="exercise-list"></div>
-    </section>
+<!-- VIEW 2: LATIHAN -->
+<section id="tab-latihan" class="view">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+    <h2 style="font-size:1.15rem; font-weight:800; color:var(--primary-neon);">Daftar Latihan</h2>
+    <button onclick="resetAllExercises()" style="background:none; border:none; color:var(--accent-rose); font-size:0.8rem; font-weight:600;">Reset Harian</button>
+  </div>
+  <div id="exercise-list"></div>
+</section>
 
-    <!-- VIEW 3: RIWAYAT & CATATAN -->
-    <section id="tab-riwayat" class="view">
-      <div class="glass-card">
-        <h3 style="font-size:1.05rem; margin-bottom:10px;">📊 Catatan Beban Maksimal</h3>
-        <p style="font-size:0.85rem; color:var(--text-muted); line-height:1.5;">
-          • Dumbbell Bench Press: <b>24 Kg</b><br>
-          • Lat Pulley Pulldown: <b>55 Kg</b><br>
-          • Incline Dumbbell Curl: <b>14 Kg</b><br>
-          • Triceps Cable Pushdown: <b>40 Kg</b>
-        </p>
-      </div>
-      <div class="glass-card" style="text-align:center;">
-        <button class="btn-action btn-danger" onclick="clearAllData()">🗑️ Kosongkan Seluruh Data</button>
-      </div>
-    </section>
+<!-- VIEW 3: RIWAYAT -->
+<section id="tab-riwayat" class="view">
+  <div class="glass-card">
+    <h3 style="font-size:1.05rem; margin-bottom:10px;">📊 Catatan Beban Maksimal</h3>
+    <p style="font-size:0.85rem; color:var(--text-muted); line-height:1.5;">
+      • Dumbbell Bench Press: <b>24 Kg</b><br>
+      • Lat Pulley Pulldown: <b>55 Kg</b><br>
+      • Incline Dumbbell Curl: <b>14 Kg</b><br>
+      • Triceps Cable Pushdown: <b>40 Kg</b>
+    </p>
+  </div>
+  <div class="glass-card" style="text-align:center;">
+    <button class="btn-action btn-danger" onclick="clearAllData()">🗑️ Kosongkan Seluruh Data</button>
+  </div>
+</section>
 
-    <!-- BOTTOM TAB NAVIGATION -->
-    <nav class="tab-bar">
-      <button class="tab-item active" data-tab="tab-dashboard"><span class="icon">🏠</span>Dashboard</button>
-      <button class="tab-item" data-tab="tab-latihan"><span class="icon">🏋️</span>Latihan</button>
-      <button class="tab-item" data-tab="tab-riwayat"><span class="icon">📊</span>Riwayat</button>
-    </nav>
+<nav class="tab-bar">
+  <button class="tab-item active" data-tab="tab-dashboard"><span class="icon">🏠</span>Dashboard</button>
+  <button class="tab-item" data-tab="tab-latihan"><span class="icon">🏋️</span>Latihan</button>
+  <button class="tab-item" data-tab="tab-riwayat"><span class="icon">📊</span>Riwayat</button>
+</nav>
 
-    <script>
-    var DEFAULT_EXERCISES = [
-      { id: 1, name: "Dumbbell Bench Press", target: "Dada", sets: "4 Set x 12 Reps", weight: "20 Kg", done: false },
-      { id: 2, name: "Lat Pulley Pulldown", target: "Punggung", sets: "4 Set x 10 Reps", weight: "50 Kg", done: false },
-      { id: 3, name: "Dumbbell Shoulder Press", target: "Bahu", sets: "3 Set x 12 Reps", weight: "16 Kg", done: false },
-      { id: 4, name: "Cable Pulley Triceps", target: "Triceps", sets: "3 Set x 15 Reps", weight: "35 Kg", done: false },
-      { id: 5, name: "Dumbbell Biceps Curl", target: "Biceps", sets: "4 Set x 12 Reps", weight: "12 Kg", done: false }
-    ];
+<script>
+var DEFAULT_EXERCISES = [
+  { id: 1, name: "Dumbbell Bench Press", target: "Dada", sets: "4 Set x 12 Reps", weight: "20 Kg", done: false },
+  { id: 2, name: "Lat Pulley Pulldown", target: "Punggung", sets: "4 Set x 10 Reps", weight: "50 Kg", done: false },
+  { id: 3, name: "Dumbbell Shoulder Press", target: "Bahu", sets: "3 Set x 12 Reps", weight: "16 Kg", done: false },
+  { id: 4, name: "Cable Pulley Triceps", target: "Triceps", sets: "3 Set x 15 Reps", weight: "35 Kg", done: false },
+  { id: 5, name: "Dumbbell Biceps Curl", target: "Biceps", sets: "4 Set x 12 Reps", weight: "12 Kg", done: false }
+];
 
-    var exercises = DB.get('gym_exercises', DEFAULT_EXERCISES);
-    var timerInterval = null;
-    var timerSeconds = 60;
+var exercises = DB.get('gym_exercises', DEFAULT_EXERCISES);
+var timerInterval = null;
+var timerSeconds = 60;
 
-    function renderExercises() {
-      var container = document.getElementById('exercise-list');
-      if (!container) return;
-      container.innerHTML = '';
-      var doneCount = 0;
+function renderExercises() {
+  var container = document.getElementById('exercise-list');
+  if (!container) return;
+  container.innerHTML = '';
+  var doneCount = 0;
 
-      exercises.forEach(function(item) {
-        if (item.done) doneCount++;
-        var row = document.createElement('div');
-        row.className = 'exercise-row' + (item.done ? ' completed' : '');
-        row.innerHTML = '<div>' +
-          '<div class="exercise-title" style="font-weight:700; font-size:0.95rem;">' + item.name + '</div>' +
-          '<div style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">' + item.target + ' • ' + item.sets + ' (' + item.weight + ')</div>' +
-          '</div>' +
-          '<button onclick="toggleDone(' + item.id + ')" style="padding:8px 14px; border-radius:10px; border:none; font-weight:700; font-size:0.78rem; cursor:pointer; background:' + (item.done ? 'var(--accent-emerald)' : 'rgba(255,255,255,0.1)') + '; color:' + (item.done ? '#000' : '#fff') + ';">' + (item.done ? '✓ SELESAI' : 'CHECK') + '</button>';
-        container.appendChild(row);
-      });
+  exercises.forEach(function(item) {
+    if (item.done) doneCount++;
+    var row = document.createElement('div');
+    row.className = 'exercise-row' + (item.done ? ' completed' : '');
+    row.innerHTML = '<div>' +
+      '<div class="exercise-title" style="font-weight:700; font-size:0.95rem;">' + item.name + '</div>' +
+      '<div style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">' + item.target + ' • ' + item.sets + ' (' + item.weight + ')</div>' +
+      '</div>' +
+      '<button onclick="toggleDone(' + item.id + ')" style="padding:8px 14px; border-radius:10px; border:none; font-weight:700; font-size:0.78rem; cursor:pointer; background:' + (item.done ? 'var(--accent-emerald)' : 'rgba(255,255,255,0.1)') + '; color:' + (item.done ? '#000' : '#fff') + ';">' + (item.done ? '✓ SELESAI' : 'CHECK') + '</button>';
+    container.appendChild(row);
+  });
 
-      // Update Metrik & Progress
-      var pct = exercises.length > 0 ? Math.round((doneCount / exercises.length) * 100) : 0;
-      var pBar = document.getElementById('progress-bar');
-      var pTxt = document.getElementById('progress-text');
-      var sDone = document.getElementById('stat-done');
-      var sCal = document.getElementById('stat-cal');
-      var sTotal = document.getElementById('stat-total');
+  var pct = exercises.length > 0 ? Math.round((doneCount / exercises.length) * 100) : 0;
+  var pBar = document.getElementById('progress-bar');
+  var pTxt = document.getElementById('progress-text');
+  var sDone = document.getElementById('stat-done');
+  var sCal = document.getElementById('stat-cal');
+  var sTotal = document.getElementById('stat-total');
 
-      if (pBar) pBar.style.width = pct + '%';
-      if (pTxt) pTxt.innerText = pct + '%';
-      if (sDone) sDone.innerText = doneCount;
-      if (sTotal) sTotal.innerText = exercises.length;
-      if (sCal) sCal.innerText = doneCount * 65;
+  if (pBar) pBar.style.width = pct + '%';
+  if (pTxt) pTxt.innerText = pct + '%';
+  if (sDone) sDone.innerText = doneCount;
+  if (sTotal) sTotal.innerText = exercises.length;
+  if (sCal) sCal.innerText = doneCount * 65;
+}
+
+window.toggleDone = function(id) {
+  exercises = exercises.map(function(e) {
+    if (e.id === id) e.done = !e.done;
+    return e;
+  });
+  DB.set('gym_exercises', exercises);
+  Native.vibrate(35);
+  renderExercises();
+  if (exercises.find(function(e){ return e.id === id; }).done) {
+    Native.toast('Gerakan selesai! Istirahat 60 detik.');
+    startRestTimer(60);
+  }
+};
+
+window.startRestTimer = function(sec) {
+  clearInterval(timerInterval);
+  timerSeconds = sec;
+  var d = document.getElementById('timer-display');
+  timerInterval = setInterval(function() {
+    timerSeconds--;
+    var m = Math.floor(timerSeconds / 60);
+    var s = timerSeconds % 60;
+    if (d) d.innerText = (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+    if (timerSeconds <= 0) {
+      clearInterval(timerInterval);
+      Native.vibrate(80);
+      Native.toast('Waktu istirahat selesai! Lanjut set berikutnya.');
     }
+  }, 1000);
+};
 
-    window.toggleDone = function(id) {
-      exercises = exercises.map(function(e) {
-        if (e.id === id) e.done = !e.done;
-        return e;
-      });
-      DB.set('gym_exercises', exercises);
-      Native.vibrate(35);
-      renderExercises();
-      if (exercises.find(function(e){ return e.id === id; }).done) {
-        Native.toast('Gerakan selesai! Istirahat 60 detik.');
-        startRestTimer(60);
-      }
-    };
+window.resetTimer = function() {
+  clearInterval(timerInterval);
+  var d = document.getElementById('timer-display');
+  if (d) d.innerText = "00:60";
+};
 
-    window.startRestTimer = function(sec) {
-      clearInterval(timerInterval);
-      timerSeconds = sec;
-      var d = document.getElementById('timer-display');
-      timerInterval = setInterval(function() {
-        timerSeconds--;
-        var m = Math.floor(timerSeconds / 60);
-        var s = timerSeconds % 60;
-        if (d) d.innerText = (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
-        if (timerSeconds <= 0) {
-          clearInterval(timerInterval);
-          Native.vibrate(80);
-          Native.toast('Waktu istirahat selesai! Lanjut set berikutnya.');
-        }
-      }, 1000);
-    };
+window.resetAllExercises = function() {
+  exercises = exercises.map(function(e){ e.done = false; return e; });
+  DB.set('gym_exercises', exercises);
+  Native.toast('Progress harian direset.');
+  renderExercises();
+};
 
-    window.resetTimer = function() {
-      clearInterval(timerInterval);
-      var d = document.getElementById('timer-display');
-      if (d) d.innerText = "00:60";
-    };
+window.clearAllData = function() {
+  localStorage.clear();
+  exercises = DEFAULT_EXERCISES;
+  Native.toast('Seluruh database dikosongkan.');
+  renderExercises();
+};
 
-    window.resetAllExercises = function() {
-      exercises = exercises.map(function(e){ e.done = false; return e; });
-      DB.set('gym_exercises', exercises);
-      Native.toast('Progress harian direset.');
-      renderExercises();
-    };
-
-    window.clearAllData = function() {
-      localStorage.clear();
-      exercises = DEFAULT_EXERCISES;
-      Native.toast('Seluruh database dikosongkan.');
-      renderExercises();
-    };
-
-    document.addEventListener('DOMContentLoaded', function() {
-      renderExercises();
-      setTimeout(function() { switchTab('tab-dashboard'); }, 100);
-    });
-    </script>
-    """
+document.addEventListener('DOMContentLoaded', function() {
+  renderExercises();
+  setTimeout(function() { switchTab('tab-dashboard'); }, 100);
+});
+</script>
+"""
 
 def assemble_pro_html(user_html, app_title):
-    # Jika kode AI terlalu pendek/kosong, pasang UI Engine Gym Studio secara otomatis
     if not user_html or len(user_html.strip()) < 120 or "<section" not in user_html:
-        body_content = build_fallback_pro_gym_html(app_title)
+        body_content = DEFAULT_FALLBACK_UI
     else:
         body_content = user_html
 
-    return f"""<!DOCTYPE html>
-<html lang="id">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>{app_title}</title>
-  <style>{PRO_STUDIO_CSS}</style>
-  <script>{PRO_STUDIO_JS}</script>
-</head>
-<body>
-  <header class="app-header">
-    <h1>{app_title}</h1>
-    <span style="font-size:1.2rem;">⚡</span>
-  </header>
-  <div class="container">
-    {body_content}
-  </div>
-</body>
-</html>"""
+    return (
+        "<!DOCTYPE html>\n<html lang=\"id\">\n<head>\n"
+        "  <meta charset=\"UTF-8\">\n"
+        "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no\">\n"
+        "  <title>" + app_title + "</title>\n"
+        "  <style>" + PRO_STUDIO_CSS + "</style>\n"
+        "  <script>" + PRO_STUDIO_JS + "</script>\n"
+        "</head>\n<body>\n"
+        "  <header class=\"app-header\">\n"
+        "    <h1>" + app_title + "</h1>\n"
+        "    <span style=\"font-size:1.2rem;\">⚡</span>\n"
+        "  </header>\n"
+        "  <div class=\"container\">\n"
+        + body_content +
+        "\n  </div>\n</body>\n</html>"
+    )
 
 def main():
     raw_name = "JadwalGym"
@@ -500,7 +482,7 @@ def main():
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(content, encoding="utf-8")
 
-    # 1. Gradle Wrapper 8.7 & Build Configuration
+    # 1. Gradle Setup
     write(ROOT / "gradle" / "wrapper" / "gradle-wrapper.properties",
         "distributionBase=GRADLE_USER_HOME\n"
         "distributionPath=wrapper/dists\n"
@@ -526,7 +508,6 @@ def main():
         "android.nonTransitiveRClass=true\n"
     )
 
-    # Menambahkan library Material Design & Vector Drawables (Menghasilkan APK ~4.5 MB)
     write(ROOT / "app" / "build.gradle",
         "plugins { id 'com.android.application' }\n\n"
         "android {\n"
@@ -556,7 +537,7 @@ def main():
         "}\n"
     )
 
-    # 2. Manifest
+    # 2. Manifest & Aset
     write(ROOT / "app" / "src" / "main" / "AndroidManifest.xml",
         f"{LT}?xml version=\"1.0\" encoding=\"utf-8\"?{GT}\n"
         f"{LT}manifest xmlns:android=\"http://schemas.android.com/apk/res/android\"{GT}\n"
@@ -582,7 +563,6 @@ def main():
         f"{LT}/manifest{GT}\n"
     )
 
-    # 3. Resources & Aset HTML
     write(ROOT / "app" / "src" / "main" / "res" / "values" / "strings.xml",
         f'{LT}resources{GT}{LT}string name="app_name"{GT}{clean_name}{LT}/string{GT}{LT}/resources{GT}'
     )
@@ -598,7 +578,7 @@ def main():
     )
     write(ROOT / "app" / "src" / "main" / "assets" / "index.html", final_html)
 
-    # 4. MainActivity dengan HTTPS AssetLoader & Native Bridge
+    # 3. MainActivity
     java_code = (
         f"package {pkg};\n\n"
         "import android.annotation.SuppressLint;\n"
