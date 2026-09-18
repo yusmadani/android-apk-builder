@@ -1,4 +1,4 @@
-name: Build Dynamic APK
+name: Build Dynamic Heavy APK
 
 on:
   repository_dispatch:
@@ -17,10 +17,16 @@ on:
         description: 'HTML Base64'
         required: false
         default: 'PCFET0NUWVBFIGh0bWw+PGh0bWw+PGJvZHk+PGgxPkFQS19PSzwvaDE+PC9ib2R5PjwvaHRtbD4='
+      engine_type:
+        description: 'Jenis Asset Pack (default/3d_game/multimedia/offline_db)'
+        required: false
+        default: 'default'
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: 1. Checkout Repository
@@ -37,44 +43,58 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: 4. Accept Android SDK Licenses
-        run: |
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses || true
-
-      - name: 5. Generate Android Project Files
+      - name: 4. Generate Base Project & Inject Heavy Assets
         env:
-          CHAT_ID: ${{ github.event.client_payload.chat_id || inputs.chat_id }}
-          APP_NAME: ${{ github.event.client_payload.app_name || inputs.app_name || 'GeneratedApp' }}
+          APP_NAME: ${{ github.event.client_payload.app_name || inputs.app_name || 'HeavyApp' }}
           HTML_B64: ${{ github.event.client_payload.html_code_b64 || inputs.html_code_b64 }}
+          ENGINE_TYPE: ${{ github.event.client_payload.engine_type || inputs.engine_type || 'default' }}
         run: |
-          python generate_project.py "$APP_NAME" "$HTML_B64"
+          python generate_project.py "$APP_NAME" "$HTML_B64" "$ENGINE_TYPE"
 
-      - name: 6. Inisialisasi Wrapper & Kompilasi APK
+      - name: 5. Inisialisasi Wrapper & Kompilasi APK
         run: |
           if [ ! -f "gradlew" ]; then
-            echo "gradlew tidak ditemukan. Membuat Gradle Wrapper 8.4..."
             gradle wrapper --gradle-version 8.4 --distribution-type bin
           fi
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon --stacktrace
+          ./gradlew assembleDebug --no-daemon
 
-      - name: 7. Kirim APK ke Telegram
+      - name: 6. Evaluasi Ukuran APK & Distribusi
         env:
           CHAT_ID: ${{ github.event.client_payload.chat_id || inputs.chat_id }}
-          APP_NAME: ${{ github.event.client_payload.app_name || inputs.app_name || 'GeneratedApp' }}
+          APP_NAME: ${{ github.event.client_payload.app_name || inputs.app_name || 'HeavyApp' }}
           BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           APK_PATH=$(find app/build/outputs/apk/debug -name "*.apk" | head -n 1)
+          FILE_SIZE_BYTES=$(stat -c%s "$APK_PATH")
+          FILE_SIZE_MB=$((FILE_SIZE_BYTES / 1048576))
           
-          if [ -z "$APK_PATH" ]; then
-            echo "Gagal menemukan file APK hasil kompilasi!"
-            exit 1
-          fi
+          echo "Ukuran APK: $FILE_SIZE_MB MB ($FILE_SIZE_BYTES bytes)"
 
-          echo "Mengirim $APK_PATH ke chat Telegram ID: $CHAT_ID"
-          
-          curl -v -F chat_id="$CHAT_ID" \
-               -F document=@"$APK_PATH" \
-               -F caption="✅ Aplikasi *$APP_NAME* berhasil dibuat dan siap diuji!" \
-               -F parse_mode="Markdown" \
-               "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument"
+          # Jika ukuran di bawah 45 MB, kirim langsung dokumennya ke Telegram
+          if [ "$FILE_SIZE_BYTES" -lt 47185920 ]; then
+            echo "Mengirim langsung via Telegram Bot API (< 45 MB)..."
+            curl -v -F chat_id="$CHAT_ID" \
+                 -F document=@"$APK_PATH" \
+                 -F caption="✅ Aplikasi *$APP_NAME* ($FILE_SIZE_MB MB) siap dipasang!" \
+                 -F parse_mode="Markdown" \
+                 "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument"
+          else
+            # Jika ukuran ratusan MB (> 45 MB), buat GitHub Release dan kirim link unduhnya
+            echo "Ukuran file melampaui batas Telegram Bot (> 45 MB). Mengunggah ke GitHub Releases..."
+            TAG_NAME="v$(date +'%Y%m%d%H%M%S')"
+            
+            # Buat Release menggunakan GitHub CLI bawaan runner
+            gh release create "$TAG_NAME" "$APK_PATH" \
+              --title "$APP_NAME (Build $TAG_NAME)" \
+              --notes "Otomatisasi build aplikasi APK berukuran besar ($FILE_SIZE_MB MB)."
+
+            APK_FILENAME=$(basename "$APK_PATH")
+            DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/${TAG_NAME}/${APK_FILENAME}"
+
+            # Kirim tautan unduhan langsung ke Telegram
+            MESSAGE="🚀 *Aplikasi Kompleks $APP_NAME Selesai!*%0A%0A📦 *Ukuran File:* ${FILE_SIZE_MB} MB%0Aℹ️ Karena ukuran melebihi batas upload Telegram (50 MB), silakan unduh APK melalui tautan langsung GitHub Release berikut:%0A%0A🔗 [Klik untuk Unduh APK](${DOWNLOAD_URL})"
+
+            curl -s "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage?chat_id=${CHAT_ID}&text=${MESSAGE}&parse_mode=Markdown"
+          fi
