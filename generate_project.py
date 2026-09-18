@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """
-Universal Native Shell Generator (Hybrid Engine)
-- Zero Javac Compilation Error: Java & Gradle 100% statis.
-- Zero XML Resource Error: Tampilan dirender langsung via Native Engine.
-- DOM Storage & IndexedDB Aktif: Data checklist / kasir tersimpan permanen di HP.
-- Native Bridge: JavaScript dapat memanggil getar (vibrate) dan notifikasi (toast).
+Universal Native Shell Generator (Offline-First Edition)
+- WebView background diset #0F172A (anti-flash putih).
+- Izin universal & file access dibuka penuh untuk mencegah pemblokiran lokal.
+- Hardware Acceleration diaktifkan untuk rendering 60 FPS.
 """
 import base64
 import json
@@ -20,221 +19,143 @@ LT = chr(60)
 GT = chr(62)
 
 
-def die(msg, code=2):
-    print(f"[FATAL] {msg}", file=sys.stderr)
-    sys.exit(code)
-
-
-def safe_get(d, keys, default=""):
-    if not isinstance(d, dict):
-        return default
-    if isinstance(keys, str):
-        keys = [keys]
-    for k in keys:
-        v = d.get(k)
-        if v and isinstance(v, str) and v.strip():
-            return v.strip()
-    return default
-
-
-def get_html_payload(d):
-    """Membaca kode HTML dari bot STB (Base64 atau Plain Text)."""
-    if not isinstance(d, dict):
-        return ""
-
-    # 1. Cek key Base64
-    b64_keys = ["html_code_b64", "code_b64", "index_html_b64", "web_code_b64", "xml_code_b64"]
-    for k in b64_keys:
-        val = d.get(k)
-        if val and isinstance(val, str) and val.strip():
-            try:
-                dec = base64.b64decode(val.strip()).decode("utf-8", errors="ignore")
-                if dec.strip():
-                    return dec.strip()
-            except Exception:
-                pass
-
-    # 2. Cek key Plain Text
-    plain_keys = ["html_code", "index_html", "code", "web_code", "activity_main_xml"]
-    for k in plain_keys:
-        val = d.get(k)
-        if val and isinstance(val, str) and val.strip():
-            s = val.strip()
-            if len(s) > 50 and " " not in s and len(s) % 4 == 0:
-                try:
-                    dec = base64.b64decode(s).decode("utf-8", errors="ignore")
-                    if LT in dec:
-                        return dec.strip()
-                except Exception:
-                    pass
-            return s
-
-    return ""
-
-
-# Template Default jika AI tidak mengirim HTML
-DEFAULT_HTML = f"""<!DOCTYPE html>
-<html lang="id">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Dynamic App</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-slate-900 text-white min-h-screen flex flex-col items-center justify-center p-6 text-center">
-    <div class="bg-slate-800 p-8 rounded-2xl shadow-xl border border-slate-700 max-w-sm w-full">
-        <h1 class="text-2xl font-bold text-emerald-400 mb-2">Aplikasi Berhasil Dibuat!</h1>
-        <p class="text-slate-300 text-sm mb-6">Engine Universal Native Shell telah aktif dan siap memuat UI modern.</p>
-        <button onclick="if(window.Android) Android.showToast('Native Bridge Berfungsi!');" class="w-full py-3 bg-emerald-500 hover:bg-emerald-600 rounded-xl font-semibold shadow-lg active:scale-95 transition">Tes Native Toast</button>
-    </div>
-</body>
-</html>"""
-
-# Icon Bawaan Aplikasi
-IC_LAUNCHER_XML = (
-    f"{LT}?xml version=\"1.0\" encoding=\"utf-8\"?{GT}\n"
-    f"{LT}vector xmlns:android=\"http://schemas.android.com/apk/res/android\"\n"
-    f"    android:width=\"108dp\"\n"
-    f"    android:height=\"108dp\"\n"
-    f"    android:viewportWidth=\"108\"\n"
-    f"    android:viewportHeight=\"108\"{GT}\n"
-    f"    {LT}path android:fillColor=\"#0F172A\" android:pathData=\"M0,0h108v108h-108z\"/{GT}\n"
-    f"    {LT}path android:fillColor=\"#10B981\" android:pathData=\"M54,20L74,40H60V74H48V40H34L54,20Z\"/{GT}\n"
-    f"{LT}/vector{GT}\n"
-)
-
-
-def clean_html(code):
-    """Membersihkan kode dari blok markdown backtick ```html ... ```."""
-    if not code:
-        return DEFAULT_HTML
-    code = code.strip()
-    code = re.sub(r"^```(?:html|xml)?\s*", "", code, flags=re.IGNORECASE)
-    code = re.sub(r"\s*```$", "", code)
-    if LT not in code:
-        return DEFAULT_HTML
-    return code
-
-
-def write(path, content):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
-
-
 def main():
     if not PAYLOAD.exists():
-        die("payload.json tidak ditemukan!")
-    try:
-        data = json.loads(PAYLOAD.read_text(encoding="utf-8"))
-    except Exception as e:
-        die(f"payload.json rusak: {e}")
+        sys.exit("[FATAL] payload.json tidak ada!")
 
-    # 1. Bersihkan Nama Aplikasi
-    raw_name = safe_get(data, ["app_name", "title", "name"], "DynamicApp")
+    data = json.loads(PAYLOAD.read_text(encoding="utf-8"))
+    raw_name = data.get("app_name", "DynamicApp")
     clean_app_name = re.sub(r"[^\w\s-]", "", raw_name).strip() or "DynamicApp"
-
-    # 2. Package Name Unik
-    pkg_suffix = re.sub(r"[^a-zA-Z0-9]", "", clean_app_name).lower()
-    if len(pkg_suffix) < 3:
-        pkg_suffix = "dynamicapp"
+    pkg_suffix = (
+        re.sub(r"[^a-zA-Z0-9]", "", clean_app_name).lower() or "dynamicapp"
+    )
     pkg = f"com.stb.{pkg_suffix}"
 
-    # 3. Baca Kode HTML Hasil AI
-    raw_html = get_html_payload(data)
-    final_html = clean_html(raw_html)
-
-    print(f"[*] App Name        : {clean_app_name}")
-    print(f"[*] Dynamic Package : {pkg}")
-    print(f"[*] HTML Engine Size: {len(final_html)} bytes")
-
-    # 4. Settings & Root Gradle
-    write(ROOT / "settings.gradle", (
-        "pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }\n"
-        "dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS); repositories { google(); mavenCentral() } }\n"
-        f"rootProject.name = '{pkg_suffix}'\n"
-        "include ':app'\n"
-    ))
-
-    write(ROOT / "build.gradle", "plugins { id 'com.android.application' version '8.5.2' apply false }\n")
-
-    write(ROOT / "gradle.properties", (
-        "org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8\n"
-        "android.useAndroidX=true\n"
-        "android.nonTransitiveRClass=true\n"
-    ))
-
-    # 5. App Module Build Configuration (Tanpa dependensi berat, kompilasi super cepat)
-    write(ROOT / "app" / "build.gradle", (
-        "plugins { id 'com.android.application' }\n\n"
-        "android {\n"
-        f"    namespace '{pkg}'\n"
-        "    compileSdk 34\n\n"
-        "    defaultConfig {\n"
-        f"        applicationId '{pkg}'\n"
-        "        minSdk 21\n"
-        "        targetSdk 34\n"
-        "        versionCode 1\n"
-        "        versionName '1.0'\n"
-        "    }\n\n"
-        "    buildTypes {\n"
-        "        release { minifyEnabled false }\n"
-        "    }\n"
-        "    compileOptions {\n"
-        "        sourceCompatibility JavaVersion.VERSION_17\n"
-        "        targetCompatibility JavaVersion.VERSION_17\n"
-        "    }\n"
-        "}\n\n"
-        "dependencies {\n"
-        "    implementation 'androidx.annotation:annotation:1.9.1'\n"
-        "}\n"
-    ))
-
-    # 6. AndroidManifest.xml (Full Izin: Internet, Storage, Vibrate)
-    manifest = (
-        f"{LT}?xml version=\"1.0\" encoding=\"utf-8\"?{GT}\n"
-        f"{LT}manifest xmlns:android=\"http://schemas.android.com/apk/res/android\"{GT}\n"
-        f"    {LT}uses-permission android:name=\"android.permission.INTERNET\" /{GT}\n"
-        f"    {LT}uses-permission android:name=\"android.permission.ACCESS_NETWORK_STATE\" /{GT}\n"
-        f"    {LT}uses-permission android:name=\"android.permission.VIBRATE\" /{GT}\n"
-        f"    {LT}application\n"
-        f"        android:allowBackup=\"true\"\n"
-        f"        android:icon=\"@drawable/ic_launcher\"\n"
-        f"        android:label=\"@string/app_name\"\n"
-        f"        android:supportsRtl=\"true\"\n"
-        f"        android:usesCleartextTraffic=\"true\"\n"
-        f"        android:theme=\"@android:style/Theme.DeviceDefault.NoActionBar\"{GT}\n"
-        f"        {LT}activity\n"
-        f"            android:name=\".MainActivity\"\n"
-        f"            android:configChanges=\"orientation|screenSize|keyboardHidden\"\n"
-        f"            android:exported=\"true\"{GT}\n"
-        f"            {LT}intent-filter{GT}\n"
-        f"                {LT}action android:name=\"android.intent.action.MAIN\" /{GT}\n"
-        f"                {LT}category android:name=\"android.intent.category.LAUNCHER\" /{GT}\n"
-        f"            {LT}/intent-filter{GT}\n"
-        f"        {LT}/activity{GT}\n"
-        f"    {LT}/application{GT}\n"
-        f"{LT}/manifest{GT}\n"
+    # 1. Ambil kode HTML dari Base64 STB
+    b64 = (
+        data.get("html_code_b64")
+        or data.get("xml_code_b64")
+        or data.get("code_b64")
     )
-    write(ROOT / "app" / "src" / "main" / "AndroidManifest.xml", manifest)
+    if b64:
+        html = base64.b64decode(b64).decode("utf-8", errors="ignore")
+    else:
+        html = (
+            f"<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1.0'>"
+            f"<style>body{{background:#0f172a;color:#fff;font-family:sans-serif;display:flex;align-items:center;"
+            f"justify-content:center;height:100vh;margin:0;}}</style></head>"
+            f"<body><h2>{clean_app_name} Siap!</h2></body></html>"
+        )
 
-    # 7. Resources Paten
-    strings_xml = (
-        f"{LT}?xml version=\"1.0\" encoding=\"utf-8\"?{GT}\n"
-        f"{LT}resources{GT}\n"
-        f"    {LT}string name=\"app_name\"{GT}{clean_app_name}{LT}/string{GT}\n"
-        f"{LT}/resources{GT}\n"
+    def write(p, content):
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content, encoding="utf-8")
+
+    # 2. Gradle Files
+    write(
+        ROOT / "settings.gradle",
+        (
+            "pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }\n"
+            "dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS); repositories { google(); mavenCentral() } }\n"
+            f"rootProject.name = '{pkg_suffix}'\n"
+            "include ':app'\n"
+        ),
     )
-    write(ROOT / "app" / "src" / "main" / "res" / "values" / "strings.xml", strings_xml)
-    write(ROOT / "app" / "src" / "main" / "res" / "drawable" / "ic_launcher.xml", IC_LAUNCHER_XML)
 
-    # 8. Tulis File HTML AI ke dalam Asset HP
-    write(ROOT / "app" / "src" / "main" / "assets" / "index.html", final_html)
+    write(
+        ROOT / "build.gradle",
+        "plugins { id 'com.android.application' version '8.5.2' apply false }\n",
+    )
 
-    # 9. Java Universal Shell Statis (100% Kebal Error)
+    write(
+        ROOT / "gradle.properties",
+        (
+            "org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8\n"
+            "android.useAndroidX=true\n"
+            "android.nonTransitiveRClass=true\n"
+        ),
+    )
+
+    write(
+        ROOT / "app" / "build.gradle",
+        (
+            "plugins { id 'com.android.application' }\n\n"
+            "android {\n"
+            f"    namespace '{pkg}'\n"
+            "    compileSdk 34\n\n"
+            "    defaultConfig {\n"
+            f"        applicationId '{pkg}'\n"
+            "        minSdk 21\n"
+            "        targetSdk 34\n"
+            "        versionCode 1\n"
+            "        versionName '1.0'\n"
+            "    }\n"
+            "    buildTypes { release { minifyEnabled false } }\n"
+            "    compileOptions {\n"
+            "        sourceCompatibility JavaVersion.VERSION_17\n"
+            "        targetCompatibility JavaVersion.VERSION_17\n"
+            "    }\n"
+            "}\n"
+            "dependencies { implementation 'androidx.annotation:annotation:1.9.1' }\n"
+        ),
+    )
+
+    # 3. Android Manifest (Hardware Accelerated & Cleartext Traffic Aktif)
+    write(
+        ROOT / "app" / "src" / "main" / "AndroidManifest.xml",
+        (
+            f"{LT}?xml version=\"1.0\" encoding=\"utf-8\"?{GT}\n"
+            f"{LT}manifest xmlns:android=\"http://schemas.android.com/apk/res/android\"{GT}\n"
+            f'    {LT}uses-permission android:name="android.permission.INTERNET" /{GT}\n'
+            f'    {LT}uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" /{GT}\n'
+            f'    {LT}uses-permission android:name="android.permission.VIBRATE" /{GT}\n'
+            f"    {LT}application\n"
+            f'        android:allowBackup="true"\n'
+            f'        android:icon="@drawable/ic_launcher"\n'
+            f'        android:label="@string/app_name"\n'
+            f'        android:hardwareAccelerated="true"\n'
+            f'        android:usesCleartextTraffic="true"\n'
+            f'        android:theme="@android:style/Theme.DeviceDefault.NoActionBar"{GT}\n'
+            f"        {LT}activity\n"
+            f'            android:name=".MainActivity"\n'
+            f'            android:configChanges="orientation|screenSize|keyboardHidden"\n'
+            f'            android:exported="true"{GT}\n'
+            f"            {LT}intent-filter{GT}\n"
+            f'                {LT}action android:name="android.intent.action.MAIN" /{GT}\n'
+            f'                {LT}category android:name="android.intent.category.LAUNCHER" /{GT}\n'
+            f"            {LT}/intent-filter{GT}\n"
+            f"        {LT}/activity{GT}\n"
+            f"    {LT}/application{GT}\n"
+            f"{LT}/manifest{GT}\n"
+        ),
+    )
+
+    # 4. Resources
+    write(
+        ROOT / "app" / "src" / "main" / "res" / "values" / "strings.xml",
+        f'{LT}resources{GT}{LT}string name="app_name"{GT}{clean_app_name}{LT}/string{GT}{LT}/resources{GT}',
+    )
+    write(
+        ROOT / "app" / "src" / "main" / "res" / "drawable" / "ic_launcher.xml",
+        (
+            f"{LT}?xml version=\"1.0\" encoding=\"utf-8\"?{GT}\n"
+            f'{LT}vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108"{GT}\n'
+            f'    {LT}path android:fillColor="#0F172A" android:pathData="M0,0h108v108h-108z"/{GT}\n'
+            f'    {LT}path android:fillColor="#10B981" android:pathData="M54,20L74,40H60V74H48V40H34L54,20Z"/{GT}\n'
+            f"{LT}/vector{GT}\n"
+        ),
+    )
+
+    # 5. Simpan file HTML ke folder Assets
+    write(ROOT / "app" / "src" / "main" / "assets" / "index.html", html)
+
+    # 6. MainActivity dengan Background Gelap & Konfigurasi WebView Anti-Block
     java_code = (
         f"package {pkg};\n\n"
         "import android.app.Activity;\n"
         "import android.content.Context;\n"
+        "import android.graphics.Color;\n"
+        "import android.os.Build;\n"
         "import android.os.Bundle;\n"
         "import android.os.Vibrator;\n"
         "import android.webkit.JavascriptInterface;\n"
@@ -247,8 +168,9 @@ def main():
         "    private WebView webView;\n\n"
         "    @Override\n"
         "    protected void onCreate(Bundle savedInstanceState) {\n"
-        "        super.onCreate(savedInstanceState);\n"
+        "        super.onCreate(savedInstanceState);\n\n"
         "        webView = new WebView(this);\n"
+        "        webView.setBackgroundColor(Color.parseColor(\"#0F172A\"));\n"
         "        setContentView(webView);\n\n"
         "        WebSettings ws = webView.getSettings();\n"
         "        ws.setJavaScriptEnabled(true);\n"
@@ -256,9 +178,13 @@ def main():
         "        ws.setDatabaseEnabled(true);\n"
         "        ws.setAllowFileAccess(true);\n"
         "        ws.setAllowContentAccess(true);\n"
+        "        ws.setAllowFileAccessFromFileURLs(true);\n"
+        "        ws.setAllowUniversalAccessFromFileURLs(true);\n"
         "        ws.setLoadWithOverviewMode(true);\n"
         "        ws.setUseWideViewPort(true);\n"
-        "        ws.setCacheMode(WebSettings.LOAD_DEFAULT);\n\n"
+        "        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {\n"
+        "            ws.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);\n"
+        "        }\n\n"
         "        webView.setWebViewClient(new WebViewClient());\n"
         "        webView.setWebChromeClient(new WebChromeClient());\n"
         "        webView.addJavascriptInterface(new NativeBridge(this), \"Android\");\n\n"
@@ -274,26 +200,18 @@ def main():
         "    }\n\n"
         "    public class NativeBridge {\n"
         "        Context context;\n"
-        "        NativeBridge(Context c) { context = c; }\n\n"
-        "        @JavascriptInterface\n"
-        "        public void showToast(String msg) {\n"
-        "            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show();\n"
-        "        }\n\n"
-        "        @JavascriptInterface\n"
-        "        public void vibrate(long ms) {\n"
-        "            try {\n"
-        "                Vibrator v = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);\n"
-        "                if (v != null) v.vibrate(ms);\n"
-        "            } catch (Exception ignored) {}\n"
+        "        NativeBridge(Context c) { context = c; }\n"
+        "        @JavascriptInterface public void showToast(String m) { Toast.makeText(context, m, Toast.LENGTH_SHORT).show(); }\n"
+        "        @JavascriptInterface public void vibrate(long ms) {\n"
+        "            try { ((Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE)).vibrate(ms); } catch(Exception ignored){}\n"
         "        }\n"
         "    }\n"
         "}\n"
     )
 
-    java_path = ROOT / "app" / "src" / "main" / "java" / pathlib.Path(*pkg.split("."))
-    write(java_path / "MainActivity.java", java_code)
-
-    print(f"[OK] Universal Native Shell siap dikompilasi untuk {clean_app_name} ({pkg})!")
+    java_dir = ROOT / "app" / "src" / "main" / "java" / pathlib.Path(*pkg.split("."))
+    write(java_dir / "MainActivity.java", java_code)
+    print(f"[OK] Universal Native Shell Offline-First siap untuk {clean_app_name} ({pkg})")
 
 
 if __name__ == "__main__":
