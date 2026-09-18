@@ -37,8 +37,9 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Accept Android SDK Licenses
+        run: |
+          yes | sdkmanager --licenses || true
 
       - name: Generate React Native + Hermes Workspace
         run: |
@@ -69,6 +70,8 @@ jobs:
             --assets-dest android/app/src/main/res
 
       - name: Build Standalone Hermes APK
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
         run: |
           cd android
           chmod +x gradlew
