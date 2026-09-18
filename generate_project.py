@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """
 React Native + Hermes Studio Project Generator
-- Mengaktifkan Hermes Bytecode AOT Compiler.
-- Menyusun struktur project Android Gradle untuk React Native.
-- Mendukung injection kode App.js dinamis buatan AI.
+- Fixed: Isolasi string JSX murni tanpa interferensi f-string Python.
+- Hermes AOT Bytecode Compilation Ready.
 """
 import base64
 import json
@@ -19,10 +18,8 @@ def write(path, content):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
 
-def get_default_app_js(app_name):
-    clean_title = app_name.replace('"', '\\"')
-    return f"""import React, {{ useState, useEffect }} from 'react';
-import {{
+BASE_REACT_NATIVE_APP = """import React, { useState, useEffect } from 'react';
+import {
   SafeAreaView,
   View,
   Text,
@@ -32,37 +29,37 @@ import {{
   StatusBar,
   Vibration,
   Alert
-}} from 'react-native';
+} from 'react-native';
 
 const INITIAL_SCHEDULE = [
-  {{ id: 1, time: '07:15 - 08:45', title: 'Pemrograman Web & Mobile', sub: 'Kelas XII RPL 1 • Lab Software', done: false }},
-  {{ id: 2, time: '09:00 - 10:30', title: 'Basis Data Terdistribusi', sub: 'Kelas XI RPL 2 • Lab Rekayasa', done: false }},
-  {{ id: 3, time: '10:45 - 12:15', title: 'Pemodelan Perangkat Lunak', sub: 'Kelas X RPL 1 • Ruang Teori 04', done: true }},
-  {{ id: 4, time: '13:00 - 14:30', title: 'Administrasi Infrastruktur Jaringan', sub: 'Kelas XII TKJ 2 • Bengkel TKJ', done: false }}
+  { id: 1, time: '07:15 - 08:45', title: 'Pemrograman Web & Mobile', sub: 'Kelas XII RPL 1 • Lab Software', done: false },
+  { id: 2, time: '09:00 - 10:30', title: 'Basis Data Terdistribusi', sub: 'Kelas XI RPL 2 • Lab Rekayasa', done: false },
+  { id: 3, time: '10:45 - 12:15', title: 'Pemodelan Perangkat Lunak', sub: 'Kelas X RPL 1 • Ruang Teori 04', done: true },
+  { id: 4, time: '13:00 - 14:30', title: 'Administrasi Infrastruktur Jaringan', sub: 'Kelas XII TKJ 2 • Bengkel TKJ', done: false }
 ];
 
-export default function App() {{
+export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [items, setItems] = useState(INITIAL_SCHEDULE);
   const [currentTime, setCurrentTime] = useState('');
 
-  useEffect(() => {{
-    const updateTime = () => {{
+  useEffect(() => {
+    const updateTime = () => {
       const d = new Date();
       const hh = String(d.getHours()).padStart(2, '0');
       const mm = String(d.getMinutes()).padStart(2, '0');
       const ss = String(d.getSeconds()).padStart(2, '0');
-      setCurrentTime(`${{hh}}:${{mm}}:${{ss}}`);
-    }};
+      setCurrentTime(hh + ':' + mm + ':' + ss);
+    };
     updateTime();
     const timer = setInterval(updateTime, 1000);
     return () => clearInterval(timer);
-  }}, []);
+  }, []);
 
-  const toggleItem = (id) => {{
+  const toggleItem = (id) => {
     Vibration.vibrate(35);
-    setItems(prev => prev.map(item => item.id === id ? {{ ...item, done: !item.done }} : item));
-  }};
+    setItems(prev => prev.map(item => item.id === id ? { ...item, done: !item.done } : item));
+  };
 
   const completedCount = items.filter(i => i.done).length;
   const progressPercent = Math.round((completedCount / items.length) * 100) || 0;
@@ -71,10 +68,9 @@ export default function App() {{
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#070D18" />
       
-      {/* HEADER */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.headerTitle}>{clean_title}</Text>
+          <Text style={styles.headerTitle}>__APP_TITLE__</Text>
           <Text style={styles.headerSubtitle}>Hermes Engine • 60 FPS Native</Text>
         </View>
         <View style={styles.clockBadge}>
@@ -85,14 +81,13 @@ export default function App() {{
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {activeTab === 'dashboard' && (
           <View>
-            {/* PROGRESS CARD */}
             <View style={styles.card}>
               <View style={styles.rowBetween}>
                 <Text style={styles.cardHeader}>Capaian Aktivitas</Text>
                 <Text style={styles.statNeon}>{progressPercent}%</Text>
               </View>
               <View style={styles.progressBarBg}>
-                <View style={[styles.progressBarFill, {{ width: `${{progressPercent}}%` }}]} />
+                <View style={[styles.progressBarFill, { width: progressPercent + '%' }]} />
               </View>
               <View style={styles.statGrid}>
                 <View style={styles.statBox}>
@@ -100,17 +95,16 @@ export default function App() {{
                   <Text style={styles.statLabel}>Total Agenda</Text>
                 </View>
                 <View style={styles.statBox}>
-                  <Text style={[styles.statNum, {{ color: '#00D4AA' }}]}>{completedCount}</Text>
+                  <Text style={[styles.statNum, { color: '#00D4AA' }]}>{completedCount}</Text>
                   <Text style={styles.statLabel}>Selesai</Text>
                 </View>
                 <View style={styles.statBox}>
-                  <Text style={[styles.statNum, {{ color: '#FF00FF' }}]}>{items.length - completedCount}</Text>
+                  <Text style={[styles.statNum, { color: '#FF00FF' }]}>{items.length - completedCount}</Text>
                   <Text style={styles.statLabel}>Tertunda</Text>
                 </View>
               </View>
             </View>
 
-            {/* QUICK LIST */}
             <Text style={styles.sectionTitle}>Agenda Terjadwal Hari Ini</Text>
             {items.map(item => (
               <TouchableOpacity
@@ -139,10 +133,10 @@ export default function App() {{
               <Text style={styles.infoText}>Modul sinkronisasi offline Hermes aktif. Semua perubahan tersimpan instan di level thread native.</Text>
               <TouchableOpacity
                 style={styles.actionBtn}
-                onPress={() => {{
+                onPress={() => {
                   Vibration.vibrate(40);
                   Alert.alert('Sinkronisasi', 'Semua entri berhasil diperbarui ke database lokal.');
-                }}}
+                }}
               >
                 <Text style={styles.actionBtnText}>SINKRONISASI DATA</Text>
               </TouchableOpacity>
@@ -162,37 +156,36 @@ export default function App() {{
         )}
       </ScrollView>
 
-      {/* BOTTOM TAB BAR */}
       <View style={styles.tabBar}>
         <TouchableOpacity
           style={styles.tabItem}
-          onPress={() => {{ Vibration.vibrate(20); setActiveTab('dashboard'); }}}
+          onPress={() => { Vibration.vibrate(20); setActiveTab('dashboard'); }}
         >
           <Text style={[styles.tabText, activeTab === 'dashboard' && styles.tabTextActive]}>DASHBOARD</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.tabItem}
-          onPress={() => {{ Vibration.vibrate(20); setActiveTab('kelola'); }}}
+          onPress={() => { Vibration.vibrate(20); setActiveTab('kelola'); }}
         >
           <Text style={[styles.tabText, activeTab === 'kelola' && styles.tabTextActive]}>KELOLA</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.tabItem}
-          onPress={() => {{ Vibration.vibrate(20); setActiveTab('analisis'); }}}
+          onPress={() => { Vibration.vibrate(20); setActiveTab('analisis'); }}
         >
           <Text style={[styles.tabText, activeTab === 'analisis' && styles.tabTextActive]}>ANALISIS</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
-}}
+}
 
-const styles = StyleSheet.create({{
-  container: {{
+const styles = StyleSheet.create({
+  container: {
     flex: 1,
     backgroundColor: '#070D18'
-  }},
-  header: {{
+  },
+  header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -201,101 +194,101 @@ const styles = StyleSheet.create({{
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0, 212, 170, 0.15)',
     backgroundColor: '#0B1424'
-  }},
-  headerTitle: {{
+  },
+  headerTitle: {
     fontSize: 20,
     fontWeight: '800',
     color: '#00D4AA',
     letterSpacing: -0.3
-  }},
-  headerSubtitle: {{
+  },
+  headerSubtitle: {
     fontSize: 11,
     color: '#8EA5C8',
     marginTop: 2
-  }},
-  clockBadge: {{
+  },
+  clockBadge: {
     backgroundColor: 'rgba(0, 212, 170, 0.12)',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: 'rgba(0, 212, 170, 0.3)'
-  }},
-  clockText: {{
+  },
+  clockText: {
     color: '#00D4AA',
     fontWeight: '700',
     fontSize: 13
-  }},
-  scrollContent: {{
+  },
+  scrollContent: {
     padding: 16,
     paddingBottom: 90
-  }},
-  card: {{
+  },
+  card: {
     backgroundColor: '#0F2744',
     borderRadius: 18,
     padding: 18,
     marginBottom: 16,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.08)'
-  }},
-  rowBetween: {{
+  },
+  rowBetween: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center'
-  }},
-  cardHeader: {{
+  },
+  cardHeader: {
     fontSize: 16,
     fontWeight: '700',
     color: '#FFFFFF'
-  }},
-  statNeon: {{
+  },
+  statNeon: {
     fontSize: 22,
     fontWeight: '900',
     color: '#00D4AA'
-  }},
-  progressBarBg: {{
+  },
+  progressBarBg: {
     height: 8,
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderRadius: 4,
     marginVertical: 12,
     overflow: 'hidden'
-  }},
-  progressBarFill: {{
+  },
+  progressBarFill: {
     height: '100%',
     backgroundColor: '#00D4AA',
     borderRadius: 4
-  }},
-  statGrid: {{
+  },
+  statGrid: {
     flexDirection: 'row',
     gap: 8,
     marginTop: 8
-  }},
-  statBox: {{
+  },
+  statBox: {
     flex: 1,
     backgroundColor: 'rgba(7, 13, 24, 0.6)',
     padding: 12,
     borderRadius: 12,
     alignItems: 'center'
-  }},
-  statNum: {{
+  },
+  statNum: {
     fontSize: 18,
     fontWeight: '800',
     color: '#FFFFFF'
-  }},
-  statLabel: {{
+  },
+  statLabel: {
     fontSize: 10,
     color: '#8EA5C8',
     marginTop: 2,
     textTransform: 'uppercase'
-  }},
-  sectionTitle: {{
+  },
+  sectionTitle: {
     fontSize: 15,
     fontWeight: '700',
     color: '#00D4AA',
     marginBottom: 12,
     letterSpacing: 0.5
-  }},
-  itemCard: {{
+  },
+  itemCard: {
     backgroundColor: '#0F2744',
     borderRadius: 14,
     padding: 16,
@@ -304,31 +297,31 @@ const styles = StyleSheet.create({{
     alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.05)'
-  }},
-  itemCardDone: {{
+  },
+  itemCardDone: {
     opacity: 0.55,
     borderColor: 'rgba(0, 212, 170, 0.3)'
-  }},
-  itemBadge: {{
+  },
+  itemBadge: {
     fontSize: 11,
     color: '#00D4AA',
     fontWeight: '700',
     marginBottom: 4
-  }},
-  itemTitle: {{
+  },
+  itemTitle: {
     fontSize: 15,
     fontWeight: '700',
     color: '#FFFFFF'
-  }},
-  itemTitleDone: {{
+  },
+  itemTitleDone: {
     textDecorationLine: 'line-through'
-  }},
-  itemSub: {{
+  },
+  itemSub: {
     fontSize: 12,
     color: '#8EA5C8',
     marginTop: 2
-  }},
-  checkBtn: {{
+  },
+  checkBtn: {
     width: 38,
     height: 38,
     borderRadius: 10,
@@ -336,33 +329,33 @@ const styles = StyleSheet.create({{
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 12
-  }},
-  checkBtnDone: {{
+  },
+  checkBtnDone: {
     backgroundColor: '#00D4AA'
-  }},
-  checkBtnText: {{
+  },
+  checkBtnText: {
     color: '#FFFFFF',
     fontWeight: '800'
-  }},
-  actionBtn: {{
+  },
+  actionBtn: {
     backgroundColor: '#00D4AA',
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
     marginTop: 16
-  }},
-  actionBtnText: {{
+  },
+  actionBtnText: {
     color: '#070D18',
     fontWeight: '800',
     fontSize: 14
-  }},
-  infoText: {{
+  },
+  infoText: {
     fontSize: 13,
     color: '#8EA5C8',
     marginTop: 8,
     lineHeight: 20
-  }},
-  tabBar: {{
+  },
+  tabBar: {
     position: 'absolute',
     bottom: 0,
     left: 0,
@@ -372,21 +365,21 @@ const styles = StyleSheet.create({{
     flexDirection: 'row',
     borderTopWidth: 1,
     borderTopColor: 'rgba(255, 255, 255, 0.08)'
-  }},
-  tabItem: {{
+  },
+  tabItem: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center'
-  }},
-  tabText: {{
+  },
+  tabText: {
     fontSize: 12,
     fontWeight: '700',
     color: '#8EA5C8'
-  }},
-  tabTextActive: {{
+  },
+  tabTextActive: {
     color: '#00D4AA'
-  }}
-}});
+  }
+});
 """
 
 def main():
@@ -416,11 +409,11 @@ def main():
             user_code = ""
 
     if not user_code or "import React" not in user_code:
-        app_js_content = get_default_app_js(clean_name)
+        app_js_content = BASE_REACT_NATIVE_APP.replace("__APP_TITLE__", clean_name)
     else:
         app_js_content = user_code
 
-    # 1. Root React Native Files
+    # 1. Root React Native Config
     write(ROOT / "package.json", json.dumps({
         "name": pkg_suffix,
         "version": "1.5.0",
@@ -454,7 +447,7 @@ def main():
         "module.exports = mergeConfig(getDefaultConfig(__dirname), config);\n"
     ))
 
-    # 2. Android Native Harness with Hermes Enabled
+    # 2. Android Harness & Hermes Configuration
     android_dir = ROOT / "android"
 
     write(android_dir / "gradle" / "wrapper" / "gradle-wrapper.properties", (
@@ -500,7 +493,6 @@ def main():
         "react.internal.disableAapt2=false\n"
     ))
 
-    # App Gradle dengan flag hermesEnabled: true
     write(android_dir / "app" / "build.gradle", (
         "apply plugin: 'com.android.application'\n"
         "apply plugin: 'org.jetbrains.kotlin.android'\n"
@@ -538,16 +530,6 @@ def main():
         "    implementation('com.facebook.react:hermes-android')\n"
         "}\n"
     ))
-
-    # Base64 debug.keystore bawaan Android untuk rilis mandiri
-    keystore_b64 = (
-        "MIIFtzCCAx+gAwIBAgIEAQIDBDANBgkqhkiG9w0BAQsFADBhMQswCQYDVQQGEwJVUzELMAkGA1UE"
-        "CBMCQ0ExEDAOBgNVBAcTB01vdW50YWluIFZpZXcxEDAOBgNVBAoTB0FuZHJvaWQxEDAOBgNVBAsT"
-        "B0FuZHJvaWQxEDAOBgNVBAMTB0FuZHJvaWQwHhcNMTAxMTI4MDAwMDAwWhcNMzAxMTI4MDAwMDAw"
-        "WjBhMQswCQYDVQQGEwJVUzELMAkGA1UECBMCQ0ExEDAOBgNVBAcTB01vdW50YWluIFZpZXcxEDAO"
-        "BgNVBAoTB0FuZHJvaWQxEDAOBgNVBAsTB0FuZHJvaWQxEDAOBgNVBAMTB0FuZHJvaWQwggEiMA0G"
-        "CSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCp/i+K5rU7eC..."
-    )
 
     # 3. Android Manifest
     write(android_dir / "app" / "src" / "main" / "AndroidManifest.xml", (
@@ -589,7 +571,7 @@ def main():
         f"{chr(60)}/vector{chr(62)}\n"
     ))
 
-    # 5. Java/Kotlin Bridge Native React Host
+    # 5. Kotlin Host Classes
     java_dir = android_dir / "app" / "src" / "main" / "java" / pathlib.Path(*pkg.split("."))
     
     write(java_dir / "MainActivity.kt", f"""package {pkg}
