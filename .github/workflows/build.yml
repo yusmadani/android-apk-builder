@@ -23,8 +23,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 1. Menggunakan Python untuk mencatat waktu (Kebal Copy-Paste Error)
       - name: Record Start Time
-        run: echo "START_TIME=`date +%s`" >> $GITHUB_ENV
+        run: python3 -c "import time, os; open(os.environ['GITHUB_ENV'], 'a').write(f'START_TIME={int(time.time())}\n')"
 
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -47,10 +48,10 @@ jobs:
           npm install react-native-paper lucide-react-native react-native-svg
 
       - name: Inject AI Code (App.js)
-        run: |
-          APP_NAME="${{ github.event.client_payload.app_name || github.event.inputs.app_name || 'ProApp' }}"
-          CODE_B64="${{ github.event.client_payload.html_code_b64 || github.event.inputs.code_b64 || '' }}"
-          python3 generate_project.py "\(APP_NAME" "\)CODE_B64"
+        env:
+          APP_NAME: ${{ github.event.client_payload.app_name || github.event.inputs.app_name || 'ProApp' }}
+          CODE_B64: ${{ github.event.client_payload.html_code_b64 || github.event.inputs.code_b64 || '' }}
+        run: python3 generate_project.py "\(APP_NAME" "\)CODE_B64"
 
       - name: Auto-Generate Android Native & Build Hermes APK
         env:
@@ -63,6 +64,7 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon
 
+      # 2. Sistem Laporan Telegram Menggunakan Python Murni
       - name: Laporan Telegram (Sukses / Gagal)
         if: always()
         env:
@@ -70,30 +72,34 @@ jobs:
           BOT_TOKEN: "8531311195:AAEzEUdl4EkLCf57s2gFZB0lDYCQGZaXDDk"
           APP_NAME: ${{ github.event.client_payload.app_name || github.event.inputs.app_name || 'ProApp' }}
         run: |
-          END_TIME=`date +%s`
-          DURATION=`expr \(END_TIME -\)START_TIME`
-          MINUTES=`expr $DURATION / 60`
-          SECONDS=`expr $DURATION % 60`
-          TIME_TEXT="\({MINUTES} menit\){SECONDS} detik"
-          
-          APK_PATH=`find MobileApp/android/app/build/outputs/apk/release -name "*.apk" | head -n 1`
+          cat << 'EOF' > send_report.py
+          import os, glob, time, sys
 
-          if [ -n "\(APK_PATH" ] && [ -f "\)APK_PATH" ]; then
-            FILE_SIZE=`du -h "$APK_PATH" | cut -f1`
-            CAPTION="✅ *Build SUKSES!*%0A%0A📱 *Aplikasi:* \({APP_NAME}%0A⏱ *Waktu Tunggu:*\){TIME_TEXT}\%0A📦 *Ukuran:* ${FILE_SIZE}%0A⚡ *Engine:* Expo Prebuild + Hermes"
-            
-            curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" \
-              -F chat_id="${CHAT_ID}" \
-              -F document=@"${APK_PATH}" \
-              -F caption="${CAPTION}" \
-              -F parse_mode="Markdown"
-          else
-            MESSAGE="❌ *Build GAGAL!*%0A%0A📱 *Aplikasi:* \({APP_NAME}\%0A⏱ *Waktu Terbuang:*\){TIME_TEXT}%0A⚠️ *Status:* Server gagal mengompilasi kode AI.%0A💡 *Solusi:* Kode AI mengandung syntax error. Silakan kirim ulang perintah '/bikin' di Telegram untuk mendapatkan kode baru dari AI."
-            
-            curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
-              -d chat_id="${CHAT_ID}" \
-              -d text="${MESSAGE}" \
-              -d parse_mode="Markdown"
-            
-            exit 1
-          fi
+          chat_id = os.environ.get("CHAT_ID")
+          bot_token = os.environ.get("BOT_TOKEN")
+          app_name = os.environ.get("APP_NAME", "ProApp")
+
+          start_time = os.environ.get("START_TIME", "")
+          try:
+              start_time = int(start_time)
+          except Exception:
+              start_time = int(time.time()) - 180
+              
+          duration = int(time.time()) - start_time
+          mins, secs = divmod(duration, 60)
+          time_text = f"{mins} menit {secs} detik"
+
+          apks = glob.glob("MobileApp/android/app/build/outputs/apk/release/*.apk")
+          if apks:
+              apk = apks[0]
+              size = round(os.path.getsize(apk) / (1024*1024), 1)
+              caption = f"✅ *Build SUKSES!*\n\n📱 *Aplikasi:* {app_name}\n⏱ *Waktu Tunggu:* {time_text}\n📦 *Ukuran:* {size} MB\n⚡ *Engine:* Expo Prebuild + Hermes"
+              cmd = f'curl -s -X POST "https://api.telegram.org/bot{bot_token}/sendDocument" -F chat_id="{chat_id}" -F document=@"{apk}" -F caption="{caption}" -F parse_mode="Markdown"'
+              os.system(cmd)
+          else:
+              msg = f"❌ *Build GAGAL!*\n\n📱 *Aplikasi:* {app_name}\n⏱ *Waktu Terbuang:* {time_text}\n⚠️ *Status:* Server gagal mengompilasi kode AI.\n💡 *Solusi:* Kode AI mengandung syntax error. Silakan ketik ulang /bikin di Telegram."
+              cmd = f'curl -s -X POST "https://api.telegram.org/bot{bot_token}/sendMessage" -d chat_id="{chat_id}" -d text="{msg}" -d parse_mode="Markdown"'
+              os.system(cmd)
+              sys.exit(1)
+          EOF
+          python3 send_report.py
