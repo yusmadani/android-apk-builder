@@ -45,11 +45,19 @@ jobs:
         run: |
           APP_NAME="${{ github.event.client_payload.app_name || github.event.inputs.app_name || 'ProApp' }}"
           CODE_B64="${{ github.event.client_payload.html_code_b64 || github.event.inputs.code_b64 || '' }}"
-          python3 generate_project.py "$APP_NAME" "$CODE_B64"
+          python3 generate_project.py "\(APP_NAME" "\)CODE_B64"
+
+      - name: Cache Node Modules
+        uses: actions/cache@v3
+        with:
+          path: node_modules
+          key: \({{ runner.os }}-node-modules-\){{ hashFiles('package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-modules-
 
       - name: Install React Native Dependencies
         run: |
-          npm install --save-dev @babel/core@^7.20.0 metro-react-native-babel-preset@^0.77.0 @react-native/babel-preset@0.73.21 --legacy-peer-deps
+          npm install --save-dev @babel/core@^7.20.0 @babel/plugin-transform-react-jsx@^7.23.4 metro-react-native-babel-preset@^0.77.0 @react-native/babel-preset@0.73.21 --legacy-peer-deps
           npm install --legacy-peer-deps
 
       - name: Compile JS to Hermes Bytecode & Bundle
@@ -69,6 +77,8 @@ jobs:
           ANDROID_HOME: /usr/local/lib/android/sdk
         run: |
           cd android
+          # Perintah ini akan menghasilkan file gradlew dan gradle-wrapper.jar secara otomatis
+          gradle wrapper --gradle-version 8.7
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon
 
@@ -80,9 +90,9 @@ jobs:
 
           APK_PATH=$(find android/app/build/outputs/apk -name "*.apk" | head -n 1)
 
-          if [ -n "$APK_PATH" ] && [ -f "$APK_PATH" ]; then
-            FILE_SIZE=$(du -h "$APK_PATH" | cut -f1)
-            CAPTION="🚀 *React Native Hermes APK Selesai!*%0A%0A📱 *Aplikasi:* ${APP_NAME}%0A⚡ *Engine:* Meta Hermes AOT Bytecode%0A📦 *Ukuran:* ${FILE_SIZE}%0A💎 *Arsitektur:* 100% Native View & GPU Rendered"
+          if [ -n "\(APK_PATH" ] && [ -f "\)APK_PATH" ]; then
+            FILE_SIZE=\((du -h "\)APK_PATH" | cut -f1)
+            CAPTION="🚀 *React Native Hermes APK Selesai!*%0A%0A📱 *Aplikasi:* \({APP_NAME}%0A⚡ *Engine:* Meta Hermes AOT Bytecode%0A📦 *Ukuran:*\){FILE_SIZE}%0A💎 *Arsitektur:* 100% Native View & GPU Rendered"
             
             curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" \
               -F chat_id="${CHAT_ID}" \
