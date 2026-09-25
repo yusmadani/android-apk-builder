@@ -77,15 +77,15 @@ jobs:
           ANDROID_HOME: /usr/local/lib/android/sdk
         run: |
           cd android
-          # Perintah ini akan menghasilkan file gradlew dan gradle-wrapper.jar secara otomatis
-          gradle wrapper --gradle-version 8.7
+          # Mengunci ke Gradle 8.3 sesuai spesifikasi wajib React Native 0.73
+          gradle wrapper --gradle-version 8.3
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon
+          ./gradlew assembleRelease --no-daemon --stacktrace
 
       - name: Kirim APK ke Telegram
         run: |
           CHAT_ID="${{ github.event.client_payload.chat_id || github.event.inputs.chat_id }}"
-          BOT_TOKEN="8531311195:AAEzEUdl4EkLCf57s2gFZB0lDYCQGZaXDDk"
+          BOT_TOKEN="8531311195:AAEzEUdl4EkLCf57s2gFZB0lDYCQG ঐতিহ্যEkLCf57s2gFZB0lDYCQGZaXDDk"
           APP_NAME="${{ github.event.client_payload.app_name || github.event.inputs.app_name || 'ProApp' }}"
 
           APK_PATH=$(find android/app/build/outputs/apk -name "*.apk" | head -n 1)
