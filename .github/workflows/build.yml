@@ -47,14 +47,6 @@ jobs:
           CODE_B64="${{ github.event.client_payload.html_code_b64 || github.event.inputs.code_b64 || '' }}"
           python3 generate_project.py "\(APP_NAME" "\)CODE_B64"
 
-      - name: Cache Node Modules
-        uses: actions/cache@v3
-        with:
-          path: node_modules
-          key: \({{ runner.os }}-node-modules-\){{ hashFiles('package.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-modules-
-
       - name: Install React Native Dependencies
         run: |
           npm install --save-dev @babel/core@^7.20.0 @babel/plugin-transform-react-jsx@^7.23.4 metro-react-native-babel-preset@^0.77.0 @react-native/babel-preset@0.73.21 --legacy-peer-deps
@@ -77,7 +69,6 @@ jobs:
           ANDROID_HOME: /usr/local/lib/android/sdk
         run: |
           cd android
-          # Mengunci ke Gradle 8.3 sesuai spesifikasi wajib React Native 0.73
           gradle wrapper --gradle-version 8.3
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon --stacktrace
@@ -85,7 +76,7 @@ jobs:
       - name: Kirim APK ke Telegram
         run: |
           CHAT_ID="${{ github.event.client_payload.chat_id || github.event.inputs.chat_id }}"
-          BOT_TOKEN="8531311195:AAEzEUdl4EkLCf57s2gFZB0lDYCQG ঐতিহ্যEkLCf57s2gFZB0lDYCQGZaXDDk"
+          BOT_TOKEN="8531311195:AAEzEUdl4EkLCf57s2gFZB0lDYCQGZaXDDk"
           APP_NAME="${{ github.event.client_payload.app_name || github.event.inputs.app_name || 'ProApp' }}"
 
           APK_PATH=$(find android/app/build/outputs/apk -name "*.apk" | head -n 1)
