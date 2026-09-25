@@ -23,7 +23,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Menggunakan Python untuk mencatat waktu (Kebal Copy-Paste Error)
       - name: Record Start Time
         run: python3 -c "import time, os; open(os.environ['GITHUB_ENV'], 'a').write(f'START_TIME={int(time.time())}\n')"
 
@@ -64,7 +63,6 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon
 
-      # 2. Sistem Laporan Telegram Menggunakan Python Murni
       - name: Laporan Telegram (Sukses / Gagal)
         if: always()
         env:
