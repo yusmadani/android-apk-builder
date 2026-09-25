@@ -49,8 +49,20 @@ jobs:
       - name: Inject AI Code (App.js)
         env:
           APP_NAME: ${{ github.event.client_payload.app_name || github.event.inputs.app_name || 'ProApp' }}
-          CODE_B64: ${{ github.event.client_payload.html_code_b64 || github.event.inputs.code_b64 || '' }}
-        run: python3 generate_project.py "\(APP_NAME" "\)CODE_B64"
+          CODE_B64: ${{ github.event.client_payload.code_b64 || github.event.inputs.code_b64 || '' }}
+        run: |
+          echo "Menyuntikkan kode AI untuk aplikasi: $APP_NAME"
+          python3 -c "
+          import os, base64
+          code_b64 = os.environ.get('CODE_B64', '')
+          if code_b64:
+              decoded_code = base64.b64decode(code_b64).decode('utf-8')
+              with open('MobileApp/App.js', 'w', encoding='utf-8') as f:
+                  f.write(decoded_code)
+              print('✅ Berhasil menyuntikkan kode AI ke MobileApp/App.js!')
+          else:
+              print('⚠️ Peringatan: CODE_B64 kosong, menggunakan template default.')
+          "
 
       - name: Auto-Generate Android Native & Build Hermes APK
         env:
