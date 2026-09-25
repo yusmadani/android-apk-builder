@@ -5,11 +5,11 @@ import re
 import pathlib
 import json
 
+# Menggunakan metode LT/GT agar kebal dari penghapusan tag HTML saat Copy-Paste
 BASE_APP = """import React, { useState, useEffect } from 'react';
-import { SafeAreaView, View, Text, TouchableOpacity, ScrollView, StyleSheet, StatusBar, Vibration } from 'react-native';
+import { SafeAreaView, View, Text, ScrollView, StyleSheet, StatusBar } from 'react-native';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('dashboard');
   const [currentTime, setCurrentTime] = useState('');
 
   useEffect(() => {
@@ -21,22 +21,22 @@ export default function App() {
   }, []);
 
   return (
-    
-      
-      
-        
-          __APP_TITLE__
-          Pro Expo Framework • Hermes AOT
-        
-        {currentTime || '00:00'}
-      
-      
-        
-          Sistem Siap Digunakan
-          Mesin Expo Prebuild & Hermes Engine berjalan sempurna di 60 FPS.
-        
-      
-    
+    LTSafeAreaView style={styles.container}GT
+      LTStatusBar barStyle="light-content" backgroundColor="#070D18" /GT
+      LTView style={styles.header}GT
+        LTViewGT
+          LTText style={styles.headerTitle}GT__APP_TITLE__LT/TextGT
+          LTText style={styles.headerSubtitle}GTPro Expo Framework • Hermes AOTLT/TextGT
+        LT/ViewGT
+        LTView style={styles.clockBadge}GTLTText style={styles.clockText}GT{currentTime || '00:00'}LT/TextGTLT/ViewGT
+      LT/ViewGT
+      LTScrollView contentContainerStyle={styles.scrollContent}GT
+        LTView style={styles.card}GT
+          LTText style={styles.cardHeader}GTSistem Siap DigunakanLT/TextGT
+          LTText style={styles.infoText}GTMesin Expo Prebuild & Hermes Engine berjalan sempurna di 60 FPS.LT/TextGT
+        LT/ViewGT
+      LT/ScrollViewGT
+    LT/SafeAreaViewGT
   );
 }
 
@@ -52,7 +52,7 @@ const styles = StyleSheet.create({
   cardHeader: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
   infoText: { fontSize: 13, color: '#8EA5C8', marginTop: 8 }
 });
-"""
+""".replace("LT", "<").replace("GT", ">")
 
 def clean_user_jsx(code):
     if not code: return ""
@@ -79,12 +79,10 @@ def main():
 
     final_code = user_code if user_code else BASE_APP.replace("__APP_TITLE__", clean_name)
     
-    # 1. Tulis kode ke direktori Expo
     app_file = pathlib.Path("MobileApp/App.js")
     app_file.parent.mkdir(parents=True, exist_ok=True)
     app_file.write_text(final_code, encoding="utf-8")
 
-    # 2. Update konfigurasi nama aplikasi di Expo
     app_json = pathlib.Path("MobileApp/app.json")
     if app_json.exists():
         data = json.loads(app_json.read_text())
