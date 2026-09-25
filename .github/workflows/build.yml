@@ -47,14 +47,20 @@ jobs:
           npm install react-native-paper lucide-react-native react-native-svg
           npx expo install @react-native-async-storage/async-storage
 
-      - name: Inject AI Code & Fix Package Name
+      - name: Inject AI Code, Package Name & Dynamic Icon Generator
         env:
           APP_NAME: ${{ github.event.client_payload.app_name || github.event.inputs.app_name || 'ProApp' }}
           CODE_B64: ${{ github.event.client_payload.code_b64 || github.event.inputs.code_b64 || '' }}
         run: |
-          echo "Menyuntikkan kode AI untuk aplikasi: $APP_NAME"
+          echo "Menyuntikkan kode AI dan membuat ikon kustom untuk: $APP_NAME"
+          
+          # Install Pillow dan font untuk generator ikon otomatis
+          sudo apt-get update && sudo apt-get install -y python3-pil fonts-dejavu-core
+          
           python3 -c "
-          import os, base64, json, re
+          import os, base64, json, re, hashlib
+          from PIL import Image, ImageDraw, ImageFont
+
           code_b64 = os.environ.get('CODE_B64', '')
           app_name = os.environ.get('APP_NAME', 'ProApp')
           
@@ -63,14 +69,46 @@ jobs:
               with open('MobileApp/App.js', 'w', encoding='utf-8') as f:
                   f.write(decoded_code)
               print('✅ Berhasil menyuntikkan kode AI ke MobileApp/App.js!')
-          else:
-              print('⚠️ Peringatan: CODE_B64 kosong.')
 
-          # Buat package name dan slug unik agar tidak saling tumpuk di HP
+          # 1. Generate Ikon Otomatis (512x512) dengan Inisial Judul Aplikasi
+          os.makedirs('MobileApp/assets', exist_ok=True)
+          
+          # Buat warna unik berdasarkan hash nama aplikasi
+          hash_val = int(hashlib.md5(app_name.encode()).hexdigest(), 16)
+          r = (hash_val & 0xFF0000) >> 16
+          g = (hash_val & 0x00FF00) >> 8
+          b = (hash_val & 0x0000FF)
+          # Pastikan warnanya tidak terlalu gelap atau terlalu terang
+          r = int(r * 0.5 + 40)
+          g = int(g * 0.5 + 40)
+          b = int(b * 0.5 + 40)
+          bg_color = (r, g, b)
+
+          img = Image.new('RGB', (512, 512), color=bg_color)
+          d = ImageDraw.Draw(img)
+
+          # Tambahkan huruf inisial di tengah ikon
+          initial = app_name[0].upper() if app_name else 'A'
+          try:
+              font = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 240)
+          except:
+              font = ImageFont.load_default()
+
+          # Posisi teks di tengah
+          bbox = d.textbbox((0, 0), initial, font=font)
+          w = bbox[2] - bbox[0]
+          h = bbox[3] - bbox[1]
+          d.text(((512 - w) / 2, (512 - h) / 2 - 20), initial, fill=(255, 255, 255), font=font)
+
+          icon_path = 'MobileApp/assets/icon.png'
+          img.save(icon_path)
+          img.save('MobileApp/assets/adaptive-icon.png')
+          print(f'🎨 Berhasil menghasilkan ikon kustom untuk {app_name}!')
+
+          # 2. Update app.json (Nama, Slug, Package ID, dan Path Ikon)
           slug_name = re.sub(r'[^a-zA-Z0-9]', '', app_name).lower()
           if not slug_name: slug_name = 'proapp'
           
-          # Update app.json agar nama, slug, dan package name sesuai judul aplikasi
           app_json_path = 'MobileApp/app.json'
           if os.path.exists(app_json_path):
               with open(app_json_path, 'r', encoding='utf-8') as f:
@@ -81,12 +119,17 @@ jobs:
               
               data['expo']['name'] = app_name
               data['expo']['slug'] = slug_name
+              data['expo']['icon'] = './assets/icon.png'
               data['expo']['android'] = data['expo'].get('android', {})
               data['expo']['android']['package'] = f'com.yusmadani.{slug_name}'
+              data['expo']['android']['adaptiveIcon'] = {
+                  'foregroundImage': './assets/adaptive-icon.png',
+                  'backgroundColor': '#ffffff'
+              }
               
               with open(app_json_path, 'w', encoding='utf-8') as f:
                   json.dump(data, f, indent=2)
-              print(f'✅ Berhasil memperbarui app.json dengan Nama: {app_name} & Package: com.yusmadani.{slug_name}')
+              print(f'✅ Konfigurasi app.json diperbarui untuk com.yusmadani.{slug_name}')
           "
 
       - name: Auto-Generate Android Native & Build Hermes APK
