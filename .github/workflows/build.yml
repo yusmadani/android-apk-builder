@@ -1,4 +1,4 @@
-name: React Native Hermes APK Builder
+name: Pro Expo APK Builder
 
 on:
   repository_dispatch:
@@ -26,10 +26,10 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js Environment
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
 
       - name: Setup Java JDK 17
         uses: actions/setup-java@v4
@@ -37,53 +37,40 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Accept Android SDK Licenses
+      - name: Scaffold Professional Expo Framework
         run: |
-          yes | sdkmanager --licenses || true
+          npx create-expo-app MobileApp --template blank
+          cd MobileApp
+          npm install react-native-paper lucide-react-native react-native-svg
 
-      - name: Generate React Native + Hermes Workspace
+      - name: Inject AI Code (App.js)
         run: |
           APP_NAME="${{ github.event.client_payload.app_name || github.event.inputs.app_name || 'ProApp' }}"
           CODE_B64="${{ github.event.client_payload.html_code_b64 || github.event.inputs.code_b64 || '' }}"
           python3 generate_project.py "\(APP_NAME" "\)CODE_B64"
 
-      - name: Install React Native Dependencies
-        run: |
-          npm install --save-dev @babel/core@^7.20.0 @babel/plugin-transform-react-jsx@^7.23.4 metro-react-native-babel-preset@^0.77.0 @react-native/babel-preset@0.73.21 --legacy-peer-deps
-          npm install --legacy-peer-deps
-
-      - name: Compile JS to Hermes Bytecode & Bundle
-        run: |
-          mkdir -p android/app/src/main/assets
-          npx react-native bundle \
-            --platform android \
-            --dev false \
-            --reset-cache \
-            --entry-file index.js \
-            --bundle-output android/app/src/main/assets/index.android.bundle \
-            --assets-dest android/app/src/main/res \
-            --verbose
-
-      - name: Build Standalone Hermes APK
+      - name: Auto-Generate Android Native & Build Hermes APK
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
         run: |
+          cd MobileApp
+          # Robot Expo merakit Gradle, Babel, dan Manifest 100% sempurna
+          npx expo prebuild --platform android --clean
           cd android
-          gradle wrapper --gradle-version 8.3
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon --stacktrace
+          ./gradlew assembleRelease --no-daemon
 
-      - name: Kirim APK ke Telegram
+      - name: Send Pro APK to Telegram
         run: |
           CHAT_ID="${{ github.event.client_payload.chat_id || github.event.inputs.chat_id }}"
           BOT_TOKEN="8531311195:AAEzEUdl4EkLCf57s2gFZB0lDYCQGZaXDDk"
           APP_NAME="${{ github.event.client_payload.app_name || github.event.inputs.app_name || 'ProApp' }}"
 
-          APK_PATH=$(find android/app/build/outputs/apk -name "*.apk" | head -n 1)
+          APK_PATH=$(find MobileApp/android/app/build/outputs/apk/release -name "*.apk" | head -n 1)
 
           if [ -n "\(APK_PATH" ] && [ -f "\)APK_PATH" ]; then
             FILE_SIZE=\((du -h "\)APK_PATH" | cut -f1)
-            CAPTION="🚀 *React Native Hermes APK Selesai!*%0A%0A📱 *Aplikasi:* \({APP_NAME}%0A⚡ *Engine:* Meta Hermes AOT Bytecode%0A📦 *Ukuran:*\){FILE_SIZE}%0A💎 *Arsitektur:* 100% Native View & GPU Rendered"
+            CAPTION="🚀 *Aplikasi Setara Studio Pro Selesai!*%0A%0A📱 *Nama:* \({APP_NAME}%0A⚡ *Engine:* Expo Prebuild + Hermes%0A📦 *Ukuran:*\){FILE_SIZE}%0A💎 *Arsitektur:* 100% Bebas Error Konfigurasi"
             
             curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" \
               -F chat_id="${CHAT_ID}" \
