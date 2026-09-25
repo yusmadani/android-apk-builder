@@ -46,7 +46,7 @@ jobs:
           cd MobileApp
           npm install react-native-paper lucide-react-native react-native-svg
           npx expo install @react-native-async-storage/async-storage
-          
+
       - name: Inject AI Code (App.js)
         env:
           APP_NAME: ${{ github.event.client_payload.app_name || github.event.inputs.app_name || 'ProApp' }}
@@ -69,7 +69,6 @@ jobs:
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
           NODE_OPTIONS: "--max-old-space-size=4096"
-          # SOLUSI 1: Memangkas ukuran APK hingga 60% dengan fokus ke arsitektur HP Modern
           ORG_GRADLE_PROJECT_reactNativeArchitectures: "arm64-v8a"
         run: |
           cd MobileApp
@@ -77,6 +76,15 @@ jobs:
           cd android
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon
+
+      - name: Rename APK According to App Name
+        run: |
+          cd MobileApp/android/app/build/outputs/apk/release/
+          if [ -f "app-release.apk" ]; then
+            CUSTOM_NAME=\((echo "\){{ github.event.client_payload.app_name || github.event.inputs.app_name || 'ProApp' }}" | tr ' ' '-' | tr -cd '[:alnum:]-_')
+            mv app-release.apk "${CUSTOM_NAME}.apk"
+            echo "✅ Berhasil mengubah nama file APK menjadi: ${CUSTOM_NAME}.apk"
+          fi
 
       - name: Laporan Telegram (Sukses / Gagal)
         if: always()
@@ -90,7 +98,8 @@ jobs:
 
           chat_id = os.environ.get("CHAT_ID")
           bot_token = os.environ.get("BOT_TOKEN")
-          app_name = os.environ.get("APP_NAME", "ProApp")
+          raw_app_name = os.environ.get("APP_NAME", "ProApp")
+          app_name = raw_app_name[:35].strip()
 
           start_time = os.environ.get("START_TIME", "")
           try:
@@ -108,26 +117,23 @@ jobs:
               size_mb = round(os.path.getsize(apk) / (1024*1024), 1)
               
               if size_mb > 49.5:
-                  # SOLUSI 2: Rencana Cadangan jika APK melebihi limit 50MB Telegram
-                  caption = f"✅ *Build SUKSES!*\n\n📱 *Aplikasi:* {app_name}\n⏱ *Waktu Tunggu:* {time_text}\n📦 *Ukuran:* {size_mb} MB\n⚡ *Engine:* Expo Prebuild + Hermes\n\n⚠️ _File melebihi 50MB (Limit Telegram). Sedang mengunggah ke Cloud..._"
+                  caption = f"✅ *Build SUKSES!*\n\n📱 *Aplikasi:* {app_name}\n⏱ *Waktu Tunggu:* {time_text}\n📦 *Ukuran:* {size_mb} MB\n⚡ *Engine:* Expo Prebuild + Hermes\n\n⚠️ _File melebihi 50MB. Sedang mengunggah ke Cloud..._"
                   os.system(f'curl -s -X POST "https://api.telegram.org/bot{bot_token}/sendMessage" -d chat_id="{chat_id}" -d text="{caption}" -d parse_mode="Markdown"')
                   
                   upload_cmd = f'curl -s -F "file=@{apk}" https://file.io'
                   try:
                       result = subprocess.check_output(upload_cmd, shell=True).decode('utf-8')
                       link = json.loads(result)['link']
-                      msg = f"🚀 *APK Siap Diunduh!*\n\nSilakan klik tautan di bawah ini untuk mengunduh aplikasi Anda (Link ini aktif untuk 1x unduhan):\n📥 {link}"
+                      msg = f"🚀 *APK Siap Diunduh!*\n📥 {link}"
                   except:
-                      msg = "❌ Gagal mengunggah APK ke cloud. File ditolak oleh sistem pihak ketiga."
-                  
+                      msg = "❌ Gagal mengunggah APK ke cloud."
                   os.system(f'curl -s -X POST "https://api.telegram.org/bot{bot_token}/sendMessage" -d chat_id="{chat_id}" -d text="{msg}" -d parse_mode="Markdown"')
               else:
-                  # APK normal (di bawah 50MB) langsung dikirim via Dokumen
                   caption = f"✅ *Build SUKSES!*\n\n📱 *Aplikasi:* {app_name}\n⏱ *Waktu Tunggu:* {time_text}\n📦 *Ukuran:* {size_mb} MB\n⚡ *Engine:* Expo Prebuild + Hermes"
                   cmd = f'curl -s -X POST "https://api.telegram.org/bot{bot_token}/sendDocument" -F chat_id="{chat_id}" -F document=@"{apk}" -F caption="{caption}" -F parse_mode="Markdown"'
                   os.system(cmd)
           else:
-              msg = f"❌ *Build GAGAL!*\n\n📱 *Aplikasi:* {app_name}\n⏱ *Waktu Terbuang:* {time_text}\n⚠️ *Status:* Server gagal mengompilasi kode AI.\n💡 *Solusi:* Kode AI mengandung syntax error. Silakan ketik ulang /bikin di Telegram."
+              msg = f"❌ *Build GAGAL!*\n\n📱 *Aplikasi:* {app_name}\n⏱ *Waktu Terbuang:* {time_text}"
               cmd = f'curl -s -X POST "https://api.telegram.org/bot{bot_token}/sendMessage" -d chat_id="{chat_id}" -d text="{msg}" -d parse_mode="Markdown"'
               os.system(cmd)
               sys.exit(1)
