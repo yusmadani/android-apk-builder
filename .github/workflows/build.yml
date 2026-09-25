@@ -67,7 +67,7 @@ jobs:
         if: always()
         env:
           CHAT_ID: ${{ github.event.client_payload.chat_id || github.event.inputs.chat_id }}
-          BOT_TOKEN: "8531311195:AAEzEUdl4EkLCf57s2gFZB0lDYCQGZaXDDk"
+          BOT_TOKEN: "8531311195:AAFx8Dh5cCg3dpwrVxmhhChpiSOfY3zDI7M"
           APP_NAME: ${{ github.event.client_payload.app_name || github.event.inputs.app_name || 'ProApp' }}
         run: |
           cat << 'EOF' > send_report.py
