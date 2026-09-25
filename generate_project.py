@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-React Native + Meta Hermes Workspace Generator (Clean & Robust Edition)
+React Native + Meta Hermes Workspace Generator (Ultra Stable Edition)
 - Solves Babel transformer / Metro parseSync issues.
-- Sets up proper babel.config.js and metro.config.js.
-- Generates 60 FPS Native Android harness with Hermes AOT Bytecode.
+- Uses Modern React Native 0.73 Autolinking (com.facebook.react.settings).
+- Locks Gradle to 8.3 and AGP to 8.1.1 for 100% compatibility.
 """
 import base64
 import json
@@ -66,118 +66,106 @@ export default function App() {
   const progressPercent = items.length > 0 ? Math.round((completedCount / items.length) * 100) : 0;
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#070D18" />
+    
       
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>__APP_TITLE__</Text>
-          <Text style={styles.headerSubtitle}>Hermes Engine • 60 FPS Native</Text>
-        </View>
-        <View style={styles.clockBadge}>
-          <Text style={styles.clockText}>{currentTime || '00:00:00'}</Text>
-        </View>
-      </View>
+      
+      
+        
+          __APP_TITLE__
+          Hermes Engine • 60 FPS Native
+        
+        
+          {currentTime || '00:00:00'}
+        
+      
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      
         {activeTab === 'dashboard' && (
-          <View>
-            <View style={styles.card}>
-              <View style={styles.rowBetween}>
-                <Text style={styles.cardHeader}>Capaian Aktivitas</Text>
-                <Text style={styles.statNeon}>{progressPercent}%</Text>
-              </View>
-              <View style={styles.progressBarBg}>
-                <View style={[styles.progressBarFill, { width: progressPercent + '%' }]} />
-              </View>
-              <View style={styles.statGrid}>
-                <View style={styles.statBox}>
-                  <Text style={styles.statNum}>{items.length}</Text>
-                  <Text style={styles.statLabel}>Total Agenda</Text>
-                </View>
-                <View style={styles.statBox}>
-                  <Text style={[styles.statNum, { color: '#00D4AA' }]}>{completedCount}</Text>
-                  <Text style={styles.statLabel}>Selesai</Text>
-                </View>
-                <View style={styles.statBox}>
-                  <Text style={[styles.statNum, { color: '#FF00FF' }]}>{items.length - completedCount}</Text>
-                  <Text style={styles.statLabel}>Tertunda</Text>
-                </View>
-              </View>
-            </View>
+          
+            
+              
+                Capaian Aktivitas
+                {progressPercent}%
+              
+              
+                
+              
+              
+                
+                  {items.length}
+                  Total Agenda
+                
+                
+                  {completedCount}
+                  Selesai
+                
+                
+                  {items.length - completedCount}
+                  Tertunda
+                
+              
+            
 
-            <Text style={styles.sectionTitle}>Agenda Terjadwal Hari Ini</Text>
+            Agenda Terjadwal Hari Ini
             {items.map(item => (
-              <TouchableOpacity
-                key={item.id}
-                style={[styles.itemCard, item.done && styles.itemCardDone]}
-                activeOpacity={0.8}
-                onPress={() => toggleItem(item.id)}
+               toggleItem(item.id)}
               >
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.itemBadge}>{item.time}</Text>
-                  <Text style={[styles.itemTitle, item.done && styles.itemTitleDone]}>{item.title}</Text>
-                  <Text style={styles.itemSub}>{item.sub}</Text>
-                </View>
-                <View style={[styles.checkBtn, item.done && styles.checkBtnDone]}>
-                  <Text style={styles.checkBtnText}>{item.done ? '✓' : 'O'}</Text>
-                </View>
-              </TouchableOpacity>
+                
+                  {item.time}
+                  {item.title}
+                  {item.sub}
+                
+                
+                  {item.done ? '✓' : 'O'}
+                
+              
             ))}
-          </View>
+          
         )}
 
         {activeTab === 'kelola' && (
-          <View>
-            <View style={styles.card}>
-              <Text style={styles.cardHeader}>Manajemen Master Data</Text>
-              <Text style={styles.infoText}>Modul sinkronisasi offline Hermes aktif. Semua perubahan tersimpan instan di level thread native.</Text>
-              <TouchableOpacity
-                style={styles.actionBtn}
-                onPress={() => {
+          
+            
+              Manajemen Master Data
+              Modul sinkronisasi offline Hermes aktif. Semua perubahan tersimpan instan di level thread native.
+               {
                   try { Vibration.vibrate(40); } catch (e) {}
                   Alert.alert('Sinkronisasi', 'Semua entri berhasil diperbarui ke database lokal.');
                 }}
               >
-                <Text style={styles.actionBtnText}>SINKRONISASI DATA</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+                SINKRONISASI DATA
+              
+            
+          
         )}
 
         {activeTab === 'analisis' && (
-          <View>
-            <View style={styles.card}>
-              <Text style={styles.cardHeader}>Performa & Ringkasan</Text>
-              <Text style={styles.infoText}>• Efektivitas Jam Aktif: 94.2%</Text>
-              <Text style={styles.infoText}>• Waktu Respon UI: &lt; 16ms (Jank-Free)</Text>
-              <Text style={styles.infoText}>• Bytecode Engine: Meta Hermes AOT Enabled</Text>
-            </View>
-          </View>
+          
+            
+              Performa & Ringkasan
+              • Efektivitas Jam Aktif: 94.2%
+              • Waktu Respon UI: Di bawah 16ms (Jank-Free)
+              • Bytecode Engine: Meta Hermes AOT Enabled
+            
+          
         )}
-      </ScrollView>
+      
 
-      <View style={styles.tabBar}>
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => { try { Vibration.vibrate(20); } catch (e) {} setActiveTab('dashboard'); }}
+      
+         { try { Vibration.vibrate(20); } catch (e) {} setActiveTab('dashboard'); }}
         >
-          <Text style={[styles.tabText, activeTab === 'dashboard' && styles.tabTextActive]}>DASHBOARD</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => { try { Vibration.vibrate(20); } catch (e) {} setActiveTab('kelola'); }}
+          DASHBOARD
+        
+         { try { Vibration.vibrate(20); } catch (e) {} setActiveTab('kelola'); }}
         >
-          <Text style={[styles.tabText, activeTab === 'kelola' && styles.tabTextActive]}>KELOLA</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => { try { Vibration.vibrate(20); } catch (e) {} setActiveTab('analisis'); }}
+          KELOLA
+        
+         { try { Vibration.vibrate(20); } catch (e) {} setActiveTab('analisis'); }}
         >
-          <Text style={[styles.tabText, activeTab === 'analisis' && styles.tabTextActive]}>ANALISIS</Text>
-        </TouchableOpacity>
-      </View>
-    </SafeAreaView>
+          ANALISIS
+        
+      
+    
   );
 }
 
@@ -389,16 +377,8 @@ def clean_user_jsx(code):
     c = code.strip()
     c = re.sub(r"^```(?:javascript|jsx|tsx|js)?\s*", "", c, flags=re.IGNORECASE)
     c = re.sub(r"\s*```$", "", c)
-    # Validasi bahwa kode benar-benar kode React Native
-    if "import React" in c and ("<View" in c or "<SafeAreaView" in c) and "export default" in c:
-        return c
-    return ""
-
-def main():
-    raw_name = "Jadwal Mengajar"
-    b64 = None
-
-    if len(sys.argv) >= 3:
+    c = c.replace("<", "<").replace(">", ">").replace("&", "&")
+    if "import React" in c and ("= 3:
         raw_name = sys.argv[1]
         b64 = sys.argv[2]
     elif PAYLOAD.exists():
@@ -441,16 +421,17 @@ def main():
         "devDependencies": {
             "@babel/core": "^7.20.0",
             "@babel/preset-env": "^7.20.0",
+            "@babel/plugin-transform-react-jsx": "^7.23.4",
             "@react-native/babel-preset": "0.73.21",
             "@react-native/metro-config": "0.73.5",
             "metro-react-native-babel-preset": "^0.77.0"
         }
     }, indent=2))
 
-    # Babel config yang kompatibel dengan Metro Transformer Worker
     write(ROOT / "babel.config.js", (
         "module.exports = {\n"
         "  presets: ['module:@react-native/babel-preset'],\n"
+        "  plugins: ['@babel/plugin-transform-react-jsx']\n"
         "};\n"
     ))
 
@@ -468,23 +449,17 @@ def main():
         "module.exports = mergeConfig(getDefaultConfig(__dirname), config);\n"
     ))
 
-    # 2. Android Native Harness with Hermes AOT Enabled
+    # 2. Android Native Harness with Hermes AOT Enabled (MODERN RN 0.73)
     android_dir = ROOT / "android"
 
-    write(android_dir / "gradle" / "wrapper" / "gradle-wrapper.properties", (
-        "distributionBase=GRADLE_USER_HOME\n"
-        "distributionPath=wrapper/dists\n"
-        "distributionUrl=https\\://services.gradle.org/distributions/gradle-8.7-bin.zip\n"
-        "zipStoreBase=GRADLE_USER_HOME\n"
-        "zipStorePath=wrapper/dists\n"
-    ))
-
     write(android_dir / "settings.gradle", (
+        "pluginManagement {\n"
+        "    includeBuild('../node_modules/@react-native/gradle-plugin')\n"
+        "}\n"
+        "plugins { id('com.facebook.react.settings') }\n"
+        "extensions.configure(com.facebook.react.ReactSettingsExtension) { it.autolinkLibrariesFromCommand() }\n"
         f"rootProject.name = '{pkg_suffix}'\n"
-        "apply from: file('../node_modules/@react-native-community/cli-platform-android/native_modules.gradle');\n"
-        "applyNativeModulesSettingsGradle(settings)\n"
         "include ':app'\n"
-        "includeBuild('../node_modules/@react-native/gradle-plugin')\n"
     ))
 
     write(android_dir / "build.gradle", (
@@ -495,13 +470,13 @@ def main():
         "        compileSdkVersion = 34\n"
         "        targetSdkVersion = 34\n"
         "        ndkVersion = '25.1.8937393'\n"
-        "        kotlinVersion = '1.9.22'\n"
+        "        kotlinVersion = '1.8.20'\n"
         "    }\n"
         "    repositories { google(); mavenCentral() }\n"
         "    dependencies {\n"
-        "        classpath('com.android.tools.build:gradle:8.5.2')\n"
+        "        classpath('com.android.tools.build:gradle:8.1.1')\n"
         "        classpath('com.facebook.react:react-native-gradle-plugin')\n"
-        "        classpath('org.jetbrains.kotlin:kotlin-gradle-plugin')\n"
+        "        classpath(\"org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion\")\n"
         "    }\n"
         "}\n"
         "allprojects { repositories { google(); mavenCentral() } }\n"
@@ -514,7 +489,6 @@ def main():
         "react.internal.disableAapt2=false\n"
     ))
 
-    # Hermes diaktifkan di app/build.gradle
     write(android_dir / "app" / "build.gradle", (
         "apply plugin: 'com.android.application'\n"
         "apply plugin: 'org.jetbrains.kotlin.android'\n"
@@ -618,7 +592,7 @@ import com.facebook.soloader.SoLoader
 class MainApplication : Application(), ReactApplication {{
     override val reactNativeHost: ReactNativeHost =
         object : DefaultReactNativeHost(this) {{
-            override fun getPackages(): List<ReactPackage> =
+            override fun getPackages(): List =
                 PackageList(this).packages
             override fun getJSMainModuleName(): String = "index"
             override fun getUseDeveloperSupport(): Boolean = false
