@@ -158,16 +158,24 @@ jobs:
         env:
           APP_NAME: ${{ github.event.client_payload.app_name || github.event.inputs.app_name || 'ProApp' }}
         run: |
-          # Menghapus spasi dan karakter khusus dari nama
-          FILE_NAME=\((echo "\)APP_NAME" | tr -d ' ' | sed 's/[^a-zA-Z0-9]//g')
-          if [ -z "$FILE_NAME" ]; then FILE_NAME="Aplikasi"; fi
-          
           cd MobileApp/android/app/build/outputs/apk/release/
-          if [ -f "app-release.apk" ]; then
-            mv app-release.apk "${FILE_NAME}.apk"
-            echo "✅ Berhasil mengubah nama file APK menjadi: ${FILE_NAME}.apk"
-          fi
-
+          
+          python3 -c "
+          import os, re
+          app_name = os.environ.get('APP_NAME', 'ProApp').strip()
+          
+          # Hapus spasi dan simbol, jadikan nama file yang bersih
+          bersih = re.sub(r'[^a-zA-Z0-9]', '', app_name)
+          if not bersih:
+              bersih = 'Aplikasi'
+              
+          nama_file = f'{bersih}.apk'
+          
+          if os.path.exists('app-release.apk'):
+              os.rename('app-release.apk', nama_file)
+              print(f'✅ Sukses mengganti nama menjadi: {nama_file}')
+          "
+          
       - name: Laporan Telegram (Sukses / Gagal)
         if: always()
         env:
