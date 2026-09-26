@@ -46,6 +46,7 @@ jobs:
           cd MobileApp
           npm install react-native-paper lucide-react-native react-native-svg
           npx expo install @react-native-async-storage/async-storage
+          npx expo install expo-camera
 
       - name: Inject AI Code, Package Name & Pro Vector Icon Generator
         env:
@@ -75,7 +76,19 @@ jobs:
           
           icon_downloaded = False
           try:
-              icon_url = 'https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/calendar-days.png'
+              app_name_lower = app_name.lower()
+              icon_url = 'https://img.icons8.com/color/512/application-window.png' # Ikon Default
+              
+              # Logika Ikon Pintar
+              if 'kasir' in app_name_lower or 'toko' in app_name_lower:
+                  icon_url = 'https://img.icons8.com/color/512/shopping-cart.png'
+              elif 'jadwal' in app_name_lower or 'kalender' in app_name_lower:
+                  icon_url = 'https://img.icons8.com/color/512/calendar.png'
+              elif 'keuangan' in app_name_lower or 'uang' in app_name_lower:
+                  icon_url = 'https://img.icons8.com/color/512/money.png'
+              elif 'scan' in app_name_lower or 'barcode' in app_name_lower:
+                  icon_url = 'https://img.icons8.com/color/512/barcode-scanner.png'
+              
               res = requests.get(icon_url, timeout=5)
               if res.status_code == 200:
                   with open('MobileApp/assets/icon_raw.png', 'wb') as handler:
@@ -84,12 +97,13 @@ jobs:
                   base_img = Image.open('MobileApp/assets/icon_raw.png').convert('RGBA')
                   base_img = base_img.resize((300, 300), Image.Resampling.LANCZOS)
                   
-                  bg = Image.new('RGBA', (512, 512), (15, 39, 68, 255))
+                  # Background putih agar gambar ikon terlihat jelas
+                  bg = Image.new('RGBA', (512, 512), (255, 255, 255, 255))
                   bg.paste(base_img, (106, 106), base_img)
                   bg.convert('RGB').save('MobileApp/assets/icon.png')
                   bg.convert('RGB').save('MobileApp/assets/adaptive-icon.png')
                   icon_downloaded = True
-                  print('✨ Berhasil merakit ikon simbol profesional!')
+                  print(f'✨ Berhasil merakit ikon khusus untuk: {app_name}')
           except Exception as e:
               print(f'⚠️ Gagal unduh ikon online: {e}')
 
@@ -100,7 +114,7 @@ jobs:
               d.rectangle([80, 160, 432, 200], fill=(255, 255, 255))
               img.save('MobileApp/assets/icon.png')
               img.save('MobileApp/assets/adaptive-icon.png')
-              print('🎨 Berhasil menghasilkan ikon geometris pro!')
+              print('🎨 Berhasil menghasilkan ikon geometris default!')
 
           slug_name = re.sub(r'[^a-zA-Z0-9]', '', app_name).lower()
           if not slug_name: slug_name = 'proapp'
@@ -120,7 +134,7 @@ jobs:
               data['expo']['android']['package'] = f'com.yusmadani.{slug_name}'
               data['expo']['android']['adaptiveIcon'] = {
                   'foregroundImage': './assets/adaptive-icon.png',
-                  'backgroundColor': '#0F2744'
+                  'backgroundColor': '#FFFFFF'
               }
               
               with open(app_json_path, 'w', encoding='utf-8') as f:
@@ -144,8 +158,8 @@ jobs:
         env:
           APP_NAME: ${{ github.event.client_payload.app_name || github.event.inputs.app_name || 'ProApp' }}
         run: |
-          # Mengambil nama aplikasi dan menghapus spasi/simbol agar jadi nama file yang valid
-          FILE_NAME=\((echo "\)APP_NAME" | head -n 1 | sed 's/[^a-zA-Z0-9]//g')
+          # Menghapus spasi dan karakter khusus dari nama
+          FILE_NAME=\((echo "\)APP_NAME" | tr -d ' ' | sed 's/[^a-zA-Z0-9]//g')
           if [ -z "$FILE_NAME" ]; then FILE_NAME="Aplikasi"; fi
           
           cd MobileApp/android/app/build/outputs/apk/release/
