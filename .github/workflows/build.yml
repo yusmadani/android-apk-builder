@@ -140,15 +140,12 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon
 
-      - name: Rename APK According to App Name
+      - name: Rename APK File
         run: |
           cd MobileApp/android/app/build/outputs/apk/release/
           if [ -f "app-release.apk" ]; then
-            RAW_NAME="${{ github.event.client_payload.app_name || github.event.inputs.app_name || 'ProApp' }}"
-            CLEAN_NAME=\((echo "\)RAW_NAME" | head -n 1 | tr ' ' '-' | tr -cd '[:alnum:]-_')
-            if [ -z "$CLEAN_NAME" ]; then CLEAN_NAME="ProApp"; fi
-            mv app-release.apk "${CLEAN_NAME}.apk"
-            echo "✅ Berhasil mengubah nama file APK menjadi: ${CLEAN_NAME}.apk"
+            mv app-release.apk JadwalMengajar.apk
+            echo "✅ Berhasil mengubah nama file APK menjadi: JadwalMengajar.apk"
           fi
 
       - name: Laporan Telegram (Sukses / Gagal)
