@@ -49,20 +49,55 @@ jobs:
           npm install react-native-paper lucide-react-native react-native-svg
           npx expo install @react-native-async-storage/async-storage
           
-          # Cek cerdas: Apakah kodenya pakai expo-camera?
-          CODE_DECODED=\((echo "\)CODE_B64" | base64 --decode)
-          if echo "$CODE_DECODED" | grep -q 'expo-camera'; then
-            echo "🔍 Terdeteksi penggunaan expo-camera. Menginstal modul & perizinan..."
-            npx expo install expo-camera
-            # Pasang plugin otomatis agar tidak force close
-            npm install expo-camera
-            npx expo install expo-build-properties
-            
-            # Sunting app.json untuk menyuntikkan plugin kamera
-            sed -i 's/"expo": {/"expo": {\n    "plugins": [\n      [\n        "expo-camera",\n        {\n          "cameraPermission": "Izinkan aplikasi ini memakai kamera."\n        }\n      ]\n    ],/' app.json
-          else
-            echo "Aplikasi ini tidak butuh kamera. Melewati instalasi kamera..."
-          fi
+          # Cek cerdas & injeksi kamera menggunakan Python murni (Anti-error)
+          python3 -c "
+          import os, base64, json
+          
+          code_b64 = os.environ.get('CODE_B64', '')
+          if not code_b64:
+              print('Tidak ada kode yang dikirim, melewati cek kamera.')
+              exit(0)
+              
+          try:
+              decoded = base64.b64decode(code_b64).decode('utf-8')
+              if 'expo-camera' in decoded:
+                  print('🔍 Terdeteksi penggunaan expo-camera. Menginstal modul & perizinan...')
+                  os.system('npx expo install expo-camera')
+                  os.system('npm install expo-camera')
+                  os.system('npx expo install expo-build-properties')
+                  
+                  # Sunting app.json dengan Python agar aman dari error sintaks
+                  if os.path.exists('app.json'):
+                      with open('app.json', 'r', encoding='utf-8') as f:
+                          data = json.load(f)
+                          
+                      if 'expo' not in data:
+                          data['expo'] = {}
+                          
+                      if 'plugins' not in data['expo']:
+                          data['expo']['plugins'] = []
+                          
+                      # Cek apakah plugin expo-camera sudah ada
+                      has_camera_plugin = False
+                      for p in data['expo']['plugins']:
+                          if isinstance(p, list) and len(p) > 0 and p[0] == 'expo-camera':
+                              has_camera_plugin = True
+                              break
+                              
+                      if not has_camera_plugin:
+                          data['expo']['plugins'].append([
+                              'expo-camera',
+                              {'cameraPermission': 'Izinkan aplikasi ini memakai kamera.'}
+                          ])
+                          
+                          with open('app.json', 'w', encoding='utf-8') as f:
+                              json.dump(data, f, indent=2)
+                          print('✅ Plugin expo-camera berhasil disuntikkan ke app.json')
+              else:
+                  print('Aplikasi ini tidak butuh kamera. Melewati instalasi kamera...')
+          except Exception as e:
+              print(f'⚠️ Terjadi kesalahan saat cek kamera: {e}')
+          "
           
       - name: Inject AI Code, Package Name & Pro Vector Icon Generator
         env:
