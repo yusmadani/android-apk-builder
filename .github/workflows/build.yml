@@ -41,13 +41,29 @@ jobs:
           java-version: '17'
 
       - name: Scaffold Professional Expo Framework
+        env:
+          CODE_B64: ${{ github.event.client_payload.code_b64 || github.event.inputs.code_b64 || '' }}
         run: |
           npx create-expo-app MobileApp --template blank
           cd MobileApp
           npm install react-native-paper lucide-react-native react-native-svg
           npx expo install @react-native-async-storage/async-storage
-          npx expo install expo-camera
-
+          
+          # Cek cerdas: Apakah kodenya pakai expo-camera?
+          CODE_DECODED=\((echo "\)CODE_B64" | base64 --decode)
+          if echo "$CODE_DECODED" | grep -q 'expo-camera'; then
+            echo "🔍 Terdeteksi penggunaan expo-camera. Menginstal modul & perizinan..."
+            npx expo install expo-camera
+            # Pasang plugin otomatis agar tidak force close
+            npm install expo-camera
+            npx expo install expo-build-properties
+            
+            # Sunting app.json untuk menyuntikkan plugin kamera
+            sed -i 's/"expo": {/"expo": {\n    "plugins": [\n      [\n        "expo-camera",\n        {\n          "cameraPermission": "Izinkan aplikasi ini memakai kamera."\n        }\n      ]\n    ],/' app.json
+          else
+            echo "Aplikasi ini tidak butuh kamera. Melewati instalasi kamera..."
+          fi
+          
       - name: Inject AI Code, Package Name & Pro Vector Icon Generator
         env:
           APP_NAME: ${{ github.event.client_payload.app_name || github.event.inputs.app_name || 'ProApp' }}
