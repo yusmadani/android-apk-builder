@@ -141,11 +141,17 @@ jobs:
           ./gradlew assembleRelease --no-daemon
 
       - name: Rename APK File
+        env:
+          APP_NAME: ${{ github.event.client_payload.app_name || github.event.inputs.app_name || 'ProApp' }}
         run: |
+          # Mengambil nama aplikasi dan menghapus spasi/simbol agar jadi nama file yang valid
+          FILE_NAME=\((echo "\)APP_NAME" | head -n 1 | sed 's/[^a-zA-Z0-9]//g')
+          if [ -z "$FILE_NAME" ]; then FILE_NAME="Aplikasi"; fi
+          
           cd MobileApp/android/app/build/outputs/apk/release/
           if [ -f "app-release.apk" ]; then
-            mv app-release.apk JadwalMengajar.apk
-            echo "✅ Berhasil mengubah nama file APK menjadi: JadwalMengajar.apk"
+            mv app-release.apk "${FILE_NAME}.apk"
+            echo "✅ Berhasil mengubah nama file APK menjadi: ${FILE_NAME}.apk"
           fi
 
       - name: Laporan Telegram (Sukses / Gagal)
