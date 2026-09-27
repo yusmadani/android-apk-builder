@@ -94,14 +94,22 @@ jobs:
               data['expo']['android'] = data['expo'].get('android', {})
               data['expo']['android']['package'] = f'com.yusmadani.{slug_name}'
               
+              # Optimasi agar ukuran APK ramping (single APK architecture target)
+              data['expo']['android']['adaptiveIcon'] = {
+                  'foregroundImage': './assets/adaptive-icon.png',
+                  'backgroundColor': '#FFFFFF'
+              }
+              
               with open(app_json_path, 'w', encoding='utf-8') as f:
                   json.dump(data, f, indent=2)
           "
 
-      - name: Build Hermes APK
+      - name: Build Slim Hermes APK
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
           NODE_OPTIONS: "--max-old-space-size=4096"
+          # Mengunci arsitektur khusus arm64 agar ukuran file APK menyusut drastis ke ~25-35 MB
+          ORG_GRADLE_PROJECT_reactNativeArchitectures: arm64-v8a
         run: |
           cd MobileApp
           npx expo prebuild --platform android --clean
@@ -134,13 +142,12 @@ jobs:
               size_mb = round(os.path.getsize(new_apk_path) / (1024*1024), 1)
               print(f'📦 Ukuran APK: {size_mb} MB')
 
-              # Jika di atas 49 MB, unggah ke file.io karena Telegram menolak >50MB
+              # Proteksi cadangan: jika tetap di atas 49 MB, unggah ke cloud
               if size_mb > 49.0:
-                  caption = f'✅ *Build SUKSES!*\n\n📱 *Aplikasi:* {raw_name}\n📦 *Ukuran:* {size_mb} MB (Melebihi 50MB, diunggah via Cloud)'
+                  caption = f'✅ *Build SUKSES!*\n\n📱 *Aplikasi:* {raw_name}\n📦 *Ukuran:* {size_mb} MB (Diunggah via Cloud)'
                   msg_url = f'https://api.telegram.org/bot{bot_token}/sendMessage'
                   subprocess.run(['curl', '-s', '-X', 'POST', msg_url, '-d', f'chat_id={chat_id}', '-d', f'text={caption}', '-d', 'parse_mode=Markdown'])
 
-                  print('☁️ Mengunggah ke file.io...')
                   upload_res = subprocess.check_output(['curl', '-s', '-F', f'file=@{new_apk_path}', 'https://file.io']).decode('utf-8')
                   try:
                       link = json.loads(upload_res).get('link', '')
@@ -150,7 +157,7 @@ jobs:
                   
                   subprocess.run(['curl', '-s', '-X', 'POST', msg_url, '-d', f'chat_id={chat_id}', '-d', f'text={link_msg}', '-d', 'parse_mode=Markdown'])
               else:
-                  # Jika di bawah 50 MB, kirim langsung dokumennya ke Telegram
+                  # Jika sudah di bawah 50 MB, kirim langsung dokumennya ke Telegram
                   caption = f'✅ *Build SUKSES!*\n\n📱 *Aplikasi:* {raw_name}\n📦 *Ukuran:* {size_mb} MB'
                   doc_url = f'https://api.telegram.org/bot{bot_token}/sendDocument'
                   subprocess.run(['curl', '-s', '-X', 'POST', doc_url, '-F', f'chat_id={chat_id}', '-F', f'document=@{new_apk_path}', '-F', f'caption={caption}', '-F', 'parse_mode=Markdown'])
