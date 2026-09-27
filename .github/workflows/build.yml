@@ -113,9 +113,8 @@ jobs:
           cd MobileApp
           npx expo prebuild --platform android --clean
           cd android
-          # Paksa gunakan Gradle wrapper yang stabil
-          ./gradlew clean
-          ./gradlew assembleRelease --no-daemon --warning-mode all
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon --infol
           
       - name: Rename & Report APK
         if: always()
