@@ -49,7 +49,9 @@ jobs:
           npx expo install expo-camera
           npx expo install react-native-webview
           npx expo install expo-build-properties
-          npx expo install @react-navigation/native @react-navigation/native-stack
+          npx expo install @react-navigation/native @react-navigation/native-stack @react-navigation/drawer
+          npx expo install react-native-gesture-handler react-native-reanimated react-native-screens react-native-safe-area-context
+          npx expo install @expo/vector-icons
 
       - name: Inject AI Code & Assets
         env:
