@@ -108,15 +108,15 @@ jobs:
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
           NODE_OPTIONS: "--max-old-space-size=4096"
-          # Mengunci arsitektur khusus arm64 agar ukuran file APK menyusut drastis ke ~25-35 MB
           ORG_GRADLE_PROJECT_reactNativeArchitectures: arm64-v8a
         run: |
           cd MobileApp
           npx expo prebuild --platform android --clean
           cd android
-          chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon
-
+          # Paksa gunakan Gradle wrapper yang stabil
+          ./gradlew clean
+          ./gradlew assembleRelease --no-daemon --warning-mode all
+          
       - name: Rename & Report APK
         if: always()
         env:
