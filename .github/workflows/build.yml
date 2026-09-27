@@ -117,16 +117,13 @@ jobs:
           APP_NAME: ${{ github.event.client_payload.app_name || github.event.inputs.app_name || 'ProApp' }}
         run: |
           python3 -c "
-          import os, glob, subprocess, re
+          import os, glob, subprocess, re, json
           
           chat_id = os.environ.get('CHAT_ID', '').strip()
           bot_token = os.environ.get('BOT_TOKEN', '').strip()
           raw_name = os.environ.get('APP_NAME', 'ProApp').split('\n')[0].strip()
           file_name = re.sub(r'[^a-zA-Z0-9]', '', raw_name)
           if not file_name: file_name = 'Aplikasi'
-
-          print(f'Debug Chat ID: {chat_id}')
-          print(f'Debug Token Tersedia: {\"Ya\" if bot_token else \"Tidak\"}')
 
           apks = glob.glob('MobileApp/android/app/build/outputs/apk/release/*.apk')
           if apks and chat_id and bot_token:
@@ -135,15 +132,32 @@ jobs:
               os.rename(apk, new_apk_path)
               
               size_mb = round(os.path.getsize(new_apk_path) / (1024*1024), 1)
-              caption = f'✅ *Build SUKSES!*\n\n📱 *Aplikasi:* {raw_name}\n📦 *Ukuran:* {size_mb} MB'
-              
-              cmd = f'curl -s -X POST \"https://api.telegram.org/bot{bot_token}/sendDocument\" -F chat_id=\"{chat_id}\" -F document=@\"{new_apk_path}\" -F caption=\"{caption}\" -F parse_mode=\"Markdown\"'
-              os.system(cmd)
-              print('📤 Perintah kirim APK ke Telegram dijalankan.')
+              print(f'📦 Ukuran APK: {size_mb} MB')
+
+              # Jika di atas 49 MB, unggah ke file.io karena Telegram menolak >50MB
+              if size_mb > 49.0:
+                  caption = f'✅ *Build SUKSES!*\n\n📱 *Aplikasi:* {raw_name}\n📦 *Ukuran:* {size_mb} MB (Melebihi 50MB, diunggah via Cloud)'
+                  msg_url = f'https://api.telegram.org/bot{bot_token}/sendMessage'
+                  subprocess.run(['curl', '-s', '-X', 'POST', msg_url, '-d', f'chat_id={chat_id}', '-d', f'text={caption}', '-d', 'parse_mode=Markdown'])
+
+                  print('☁️ Mengunggah ke file.io...')
+                  upload_res = subprocess.check_output(['curl', '-s', '-F', f'file=@{new_apk_path}', 'https://file.io']).decode('utf-8')
+                  try:
+                      link = json.loads(upload_res).get('link', '')
+                      link_msg = f'🚀 *Link Unduh APK:* \n{link}'
+                  except:
+                      link_msg = '❌ Gagal mengunggah ke cloud.'
+                  
+                  subprocess.run(['curl', '-s', '-X', 'POST', msg_url, '-d', f'chat_id={chat_id}', '-d', f'text={link_msg}', '-d', 'parse_mode=Markdown'])
+              else:
+                  # Jika di bawah 50 MB, kirim langsung dokumennya ke Telegram
+                  caption = f'✅ *Build SUKSES!*\n\n📱 *Aplikasi:* {raw_name}\n📦 *Ukuran:* {size_mb} MB'
+                  doc_url = f'https://api.telegram.org/bot{bot_token}/sendDocument'
+                  subprocess.run(['curl', '-s', '-X', 'POST', doc_url, '-F', f'chat_id={chat_id}', '-F', f'document=@{new_apk_path}', '-F', f'caption={caption}', '-F', 'parse_mode=Markdown'])
+                  print('📤 APK berhasil dikirim langsung ke Telegram.')
           else:
               print('⚠️ Gagal mengirim: File APK tidak ditemukan atau Chat ID / Token Bot kosong.')
               if chat_id and bot_token:
                   msg = f'❌ *Build GAGAL atau APK tidak ditemukan!*\n\n📱 *Aplikasi:* {raw_name}'
-                  cmd = f'curl -s -X POST \"https://api.telegram.org/bot{bot_token}/sendMessage\" -d chat_id=\"{chat_id}\" -d text=\"{msg}\" -d parse_mode=\"Markdown\"'
-                  os.system(cmd)
+                  subprocess.run(['curl', '-s', '-X', 'POST', f'https://api.telegram.org/bot{bot_token}/sendMessage', '-d', f'chat_id={chat_id}', '-d', f'text={msg}', '-d', 'parse_mode=Markdown'])
           "
