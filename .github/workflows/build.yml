@@ -114,7 +114,7 @@ jobs:
           npx expo prebuild --platform android --clean
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon --infol
+          ./gradlew assembleRelease --no-daemon --info
           
       - name: Rename & Report APK
         if: always()
