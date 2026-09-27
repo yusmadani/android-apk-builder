@@ -51,15 +51,13 @@ jobs:
           npm install react-native-paper lucide-react-native react-native-svg
           npx expo install @react-native-async-storage/async-storage
 
-          # 2. Skrip Python Pintar: Deteksi otomatis import di App.js dan instal jika ada!
+          # 2. Skrip Python Pintar & Aman (Anti-Error)
           python3 -c "
-          import os, base64, re
+          import os, base64, json, re
 
           code_b64 = os.environ.get('CODE_B64', '')
           if code_b64:
               decoded = base64.b64decode(code_b64).decode('utf-8')
-              
-              # Tulis dulu kodenya ke App.js agar bisa dianalisis
               with open('App.js', 'w', encoding='utf-8') as f:
                   f.write(decoded)
               print('✅ Kode AI berhasil disuntikkan sementara untuk dianalisis.')
@@ -68,7 +66,7 @@ jobs:
               with open('App.js', 'r', encoding='utf-8') as f:
                   content = f.read()
 
-              # Daftar pustaka pihak ketiga yang sering diminta AI
+              # Daftar pustaka pihak ketiga yang otomatis dideteksi
               possible_libs = {
                   'react-native-webview': 'npx expo install react-native-webview',
                   'expo-camera': 'npx expo install expo-camera',
@@ -82,27 +80,24 @@ jobs:
 
               print('🔍 Menganalisis pustaka yang dibutuhkan kode...')
               for lib_name, install_cmd in possible_libs.items():
-                  # Cek apakah nama pustaka tersebut di-import di dalam kode App.js
                   if lib_name in content:
                       print(f'📦 Pustaka terdeteksi: {lib_name}. Menjalankan instalasi otomatis...')
                       os.system(install_cmd)
 
-              # Cek khusus untuk konfigurasi kamera & izin otomatis
+              # Konfigurasi plugin kamera otomatis jika terdeteksi
               if 'expo-camera' in content:
-                  import json
                   os.system('npx expo install expo-build-properties')
                   if os.path.exists('app.json'):
-                      with open('app.json', 'r', encoding='utf-8') as jf:
-                          jdata = json.load(jf)
+                      with open('app.json', 'r', encoding='utf-8') as f:
+                          jdata = json.load(f)
                       if 'expo' not in jdata: jdata['expo'] = {}
                       if 'plugins' not in jdata['expo']: jdata['expo']['plugins'] = []
                       
-                      # Masukkan plugin kamera jika belum ada
                       has_cam = any(isinstance(p, list) and p[0] == 'expo-camera' for p in jdata['expo']['plugins'])
                       if not has_cam:
                           jdata['expo']['plugins'].append(['expo-camera', {'cameraPermission': 'Izinkan aplikasi memakai kamera.'}])
-                          with open('app.json', 'w', encoding='utf-8') as jf:
-                              json.dump(jf, jf, indent=2) # Diperbaiki nanti disimpan dengan benar
+                          with open('app.json', 'w', encoding='utf-8') as f:
+                              json.dump(jdata, f, indent=2)
                       print('✅ Konfigurasi plugin kamera disiapkan otomatis.')
           "
           
