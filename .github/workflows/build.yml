@@ -118,24 +118,32 @@ jobs:
         run: |
           python3 -c "
           import os, glob, subprocess, re
-          chat_id = os.environ.get('CHAT_ID')
-          bot_token = os.environ.get('BOT_TOKEN')
+          
+          chat_id = os.environ.get('CHAT_ID', '').strip()
+          bot_token = os.environ.get('BOT_TOKEN', '').strip()
           raw_name = os.environ.get('APP_NAME', 'ProApp').split('\n')[0].strip()
           file_name = re.sub(r'[^a-zA-Z0-9]', '', raw_name)
           if not file_name: file_name = 'Aplikasi'
 
+          print(f'Debug Chat ID: {chat_id}')
+          print(f'Debug Token Tersedia: {\"Ya\" if bot_token else \"Tidak\"}')
+
           apks = glob.glob('MobileApp/android/app/build/outputs/apk/release/*.apk')
-          if apks:
+          if apks and chat_id and bot_token:
               apk = apks[0]
               new_apk_path = os.path.join(os.path.dirname(apk), f'{file_name}.apk')
               os.rename(apk, new_apk_path)
               
               size_mb = round(os.path.getsize(new_apk_path) / (1024*1024), 1)
               caption = f'✅ *Build SUKSES!*\n\n📱 *Aplikasi:* {raw_name}\n📦 *Ukuran:* {size_mb} MB'
+              
               cmd = f'curl -s -X POST \"https://api.telegram.org/bot{bot_token}/sendDocument\" -F chat_id=\"{chat_id}\" -F document=@\"{new_apk_path}\" -F caption=\"{caption}\" -F parse_mode=\"Markdown\"'
               os.system(cmd)
+              print('📤 Perintah kirim APK ke Telegram dijalankan.')
           else:
-              msg = f'❌ *Build GAGAL!*\n\n📱 *Aplikasi:* {raw_name}'
-              cmd = f'curl -s -X POST \"https://api.telegram.org/bot{bot_token}/sendMessage\" -d chat_id=\"{chat_id}\" -d text=\"{msg}\" -d parse_mode=\"Markdown\"'
-              os.system(cmd)
+              print('⚠️ Gagal mengirim: File APK tidak ditemukan atau Chat ID / Token Bot kosong.')
+              if chat_id and bot_token:
+                  msg = f'❌ *Build GAGAL atau APK tidak ditemukan!*\n\n📱 *Aplikasi:* {raw_name}'
+                  cmd = f'curl -s -X POST \"https://api.telegram.org/bot{bot_token}/sendMessage\" -d chat_id=\"{chat_id}\" -d text=\"{msg}\" -d parse_mode=\"Markdown\"'
+                  os.system(cmd)
           "
